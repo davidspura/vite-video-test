@@ -20,7 +20,7 @@ const SEGMENT_LENGTH = 10000; // 10 seconds split into 2 second segment in Trans
 // const SEGMENT_INDEX_REGEX = /s(\d+)\.m4s/;
 // const INIT_INDEX_REGEX = /i(\d+)\.mp4/;
 const SEGMENT_DURATION_REGEX = /#EXTINF:([\d.]+),/g;
-// const TRANSCODER_RESET_TIME = 2 * 60000; // 2 minutes
+const TRANSCODER_RESET_TIME = 15 * 60000; // 15 minutes
 
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
@@ -512,16 +512,21 @@ export class Transcoder {
     return segmentNumberA - segmentNumberB;
   };
 
-  // private refreshInstance = async () => {
-  //   const now = new Date().getTime();
-  //   if (this.initDate.getTime() + TRANSCODER_RESET_TIME < now) {
-  //     console.log("Creating new FFMPEG instance");
-  //     this.ffmpeg.exit();
-  //     this.ffmpeg = null!;
-  //     await this.init();
-  //     this.initDate = new Date();
-  //   }
-  // };
+  private refreshInstance = async () => {
+    const now = new Date().getTime();
+    if (this.initDate.getTime() + TRANSCODER_RESET_TIME < now) {
+      console.log("Creating new FFMPEG instance");
+      this.ffmpeg.exit();
+
+      if (!this.ffmpeg.isLoaded()) {
+        console.time("Ffmpegloaded");
+        await this.ffmpeg.load();
+        console.timeEnd("Ffmpegloaded");
+      }
+
+      this.initDate = new Date();
+    }
+  };
 
   transcode = async ({
     blob,
@@ -531,11 +536,11 @@ export class Transcoder {
     includeInitData?: boolean;
   }) => {
     if (!this.ffmpeg) console.error("Ffmpeg not initialized");
-    if (!this.ffmpeg.isLoaded()) {
-      console.time("Ffmpegloaded");
-      await this.ffmpeg.load();
-      console.timeEnd("Ffmpegloaded");
-    }
+    // if (!this.ffmpeg.isLoaded()) {
+    //   console.time("Ffmpegloaded");
+    //   await this.ffmpeg.load();
+    //   console.timeEnd("Ffmpegloaded");
+    // }
 
     const arrayBuffer = await blob.arrayBuffer();
     this.ffmpeg.FS("writeFile", "input.webm", new Uint8Array(arrayBuffer));
@@ -597,8 +602,8 @@ export class Transcoder {
     this.ffmpeg.FS("unlink", "playlist.m3u8");
     this.ffmpeg.FS("unlink", "init.mp4");
 
-    // await this.refreshInstance();
-    this.ffmpeg.exit();
+    await this.refreshInstance();
+    // this.ffmpeg.exit();
     return {
       segmentsData,
       initData,
