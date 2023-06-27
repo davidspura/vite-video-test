@@ -18,14 +18,18 @@ self.addEventListener("install", (event) => {
 self.addEventListener("fetch", async (event) => {
   if (hslFilenames.some((f) => event.request.url.includes(f))) {
     const filename = event.request.url.split("/").pop();
-    // console.time("fetch");
+
     event.respondWith(
       (async () => {
         if (filename === INITIAL_PLAYLIST)
           send("initial-playlist-request", { filename });
         else if (filename.includes(DELTA_PLAYLIST))
           send("delta-playlist-request", { filename });
-        else send("file-request", { filename });
+        else if (filename.startsWith("g") && filename.endsWith(".mp4")) {
+          send("gap-init", { filename });
+        } else if (filename.startsWith("g") && filename.endsWith(".m4s")) {
+          send("gap-segment", { filename });
+        } else send("file-request", { filename });
 
         try {
           const file = await waitForFile(filename);

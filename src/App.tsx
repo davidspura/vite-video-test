@@ -6,21 +6,16 @@ import videojs from "video.js";
 import "video.js/dist/video-js.css";
 
 import Recorder from "./final/Recorder";
-import { Timeline } from "./Player";
-import TestTimeline from "./TestTimeline";
+import Timeline from "./Timeline";
 
-const timeline = new Timeline();
 const Video = chakra("video");
-const Promise = createMediaRecorder(timeline);
-
-// const Promise = createVideoEncoder();
+const Promise = createMediaRecorder();
 
 function App() {
   const [isReady, setIsReady] = useState(false);
   const isInitiated = useRef(false);
   const recorder = useRef<Recorder | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
-  // const recorder = useRef<() => void>(() => {});
 
   useEffect(() => {
     if (!isInitiated.current) {
@@ -29,26 +24,6 @@ function App() {
       }).finally(() => {
         isInitiated.current = true;
         setIsReady(true);
-
-        // const player = videojs("static_playlist_video", {
-        //   liveui: true,
-        // });
-        // player.play();
-
-        // const video = document.querySelector(
-        //   "#playlist_video"
-        // ) as HTMLVideoElement;
-        // const videoSrc = "/playlist/playlist.m3u8";
-        // // const videoSrc = "/playlist-working/playlist.m3u8";
-        // if (video.canPlayType("application/vnd.apple.mpegurl")) {
-        //   console.log("Video supports .m3u8 playlist");
-        //   video.src = videoSrc;
-        // } else if (window.Hls.isSupported()) {
-        //   console.log("using hls library...");
-        //   const hls = new window.Hls();
-        //   hls.loadSource(videoSrc);
-        //   hls.attachMedia(video);
-        // }
       });
     }
   }, []);
@@ -111,29 +86,30 @@ function App() {
         />
       </Video> */}
 
-      {isReady && (
-        <>
-          <Video
-            ref={videoRef}
-            id="playlist_video"
-            className="video-js vjs-default-skin"
-            controls
-            preload="auto"
-            muted
-            data-setup="{}"
-            onTimeUpdate={() => {
-              console.log(videoRef.current?.currentTime);
-            }}
-          >
-            <source src="/playlist.m3u8" type="application/x-mpegURL" />
-          </Video>
-          {/* <Player /> */}
-          {timeline.render()}
-        </>
-      )}
-      <TestTimeline />
+      <Timeline canStart={isReady} />
     </Box>
   );
 }
 
 export default App;
+
+// {isReady && (
+//   <>
+//     <Video
+//       ref={videoRef}
+//       id="playlist_video"
+//       className="video-js vjs-default-skin"
+//       controls
+//       preload="auto"
+//       muted
+//       data-setup="{}"
+//       onTimeUpdate={() => {
+//         console.log(videoRef.current?.currentTime);
+//       }}
+//     >
+//       <source src="/playlist.m3u8" type="application/x-mpegURL" />
+//     </Video>
+//     {/* <Player /> */}
+//     {timeline.render()}
+//   </>
+// )}

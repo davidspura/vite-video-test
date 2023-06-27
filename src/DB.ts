@@ -6,11 +6,13 @@ export type HlsDbItem = {
   duration: string | null;
   discontinuity: boolean;
   rotation: "horizontal";
+  isGap: boolean;
 };
 
 const DB_NAME = "hls-database";
 const STORE_NAME = "hls-files";
-const INDEX_NAME = "createdAt";
+const DATE_INDEX = "createdAt";
+const FILENAME_INDEX = "filename";
 
 export default class DB {
   private version = 1;
@@ -32,9 +34,12 @@ export default class DB {
       request.onupgradeneeded = (e) => {
         const db = (e.target as IDBOpenDBRequest).result;
         const objectStore = db.createObjectStore(STORE_NAME, {
-          keyPath: "filename",
+          autoIncrement: true,
         });
-        objectStore.createIndex(INDEX_NAME, INDEX_NAME, { unique: false });
+        objectStore.createIndex(DATE_INDEX, DATE_INDEX, { unique: false });
+        objectStore.createIndex(FILENAME_INDEX, FILENAME_INDEX, {
+          unique: false,
+        });
         objectStore.transaction.oncomplete = (event) => {
           console.log("Object store created ", event);
         };
@@ -42,7 +47,7 @@ export default class DB {
     });
   };
 
-  private createTransaction = (mode: IDBTransactionMode) => {
+  createTransaction = (mode: IDBTransactionMode) => {
     if (!this.db) throw Error("Transaction couldn't be created, db is null");
     // console.log("Creating transaction");
     const transaction = this.db.transaction(STORE_NAME, mode);
@@ -57,24 +62,6 @@ export default class DB {
       // console.log("Transaction aborted ", e);
     };
     return objectStore;
-  };
-
-  getCursor = (indexName?: "createdAt") => {
-    const objectStore = this.createTransaction("readonly");
-    return indexName ? objectStore.index(indexName) : objectStore;
-
-    // return  ()=> new Promise((resolve, reject)=>{
-    //   cursor.onsuccess = (e) => {
-    //     const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
-    //     if (cursor) {
-    //       console.log("Cursor OK: ", cursor);
-    //       cursor.continue();
-    //     } else console.log("Cursor finished");
-    //   };
-    //   cursor.onerror = (e) => {
-    //     console.log("Cursor failed: ", e);
-    //   };
-    // })
   };
 
   getWrite = () => {
@@ -94,7 +81,8 @@ export default class DB {
   };
 
   getDelete = () => {
-    const objectStore = this.createTransaction("readwrite");
+    const indexObjectStore = this.createTransaction("readwrite");
+    const { objectStore } = indexObjectStore.index(FILENAME_INDEX);
     return (filename: string) =>
       new Promise((resolve, reject) => {
         const request = objectStore.delete(filename);
@@ -110,27 +98,29 @@ export default class DB {
   };
 
   getRead = () => {
-    const objectStore = this.createTransaction("readwrite");
+    const indexObjectStore = this.createTransaction("readonly");
+    const index = indexObjectStore.index(FILENAME_INDEX);
     return (filename: string) =>
       new Promise<HlsDbItem>((resolve, reject) => {
-        const request = objectStore.get(filename);
+        const request = index.get(filename);
         request.onsuccess = (e) => {
           const result = (e.target as IDBRequest<HlsDbItem>).result;
-          // console.log("DB 'read' OK: ", result);
+          // console.log(`DB 'read' OK for ${filename}: `, result, e);
           resolve(result);
         };
         request.onerror = (e) => {
-          // console.log("DB 'read' failed ", e);
+          console.log("DB 'read' failed ", e);
           reject();
         };
       });
   };
 
   getReadAll = () => {
-    const objectStore = this.createTransaction("readwrite");
+    const indexObjectStore = this.createTransaction("readonly");
+    const index = indexObjectStore.index(FILENAME_INDEX);
     return () =>
       new Promise<HlsDbItem[]>((resolve, reject) => {
-        const request = objectStore.getAll();
+        const request = index.getAll();
         request.onsuccess = (e) => {
           const result = (e.target as IDBRequest<HlsDbItem[]>).result;
           // console.log("DB 'read ALL' OK");

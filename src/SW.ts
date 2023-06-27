@@ -1,14 +1,12 @@
 import DB from "./DB";
-import { Timeline } from "./Player";
-import { Playlist } from "./final/Recorder";
+import { Playlist, getGapInit, getGapSegment } from "./final/Recorder";
 
 export default class SW {
   db: DB | null = null;
   playlist: Playlist | null = null;
 
-  constructor(private timeline: Timeline, private workerPath = "/sw.js") {
+  constructor(private workerPath = "/sw.js") {
     this.workerPath = workerPath;
-    this.timeline = timeline;
     this.init();
   }
 
@@ -20,11 +18,14 @@ export default class SW {
       if (!this.playlist) return;
 
       const { type, filename } = e.data;
+      const read = this.db.getRead();
 
       if (type === "file-request") {
         // will be done on CAMERA
-        const file = await this.db.getRead()(filename);
+        const file = await read(filename);
         console.log("Got file from DB: ", file.filename);
+        const event = new CustomEvent("timeline-update", { detail: file });
+        document.dispatchEvent(event);
         this.post(file);
       }
 
@@ -32,20 +33,32 @@ export default class SW {
         // will be done on CAMERA
         const { data, duration, startDate } =
           await this.playlist.generatePlaylist();
-        this.timeline.update(duration);
+        const event = new CustomEvent("duration-update", {
+          detail: { duration, startDate },
+        });
+        document.dispatchEvent(event);
         this.post({ filename, data });
       }
       if (type === "delta-playlist-request") {
         // will be done on CAMERA
         const { data, duration, startDate } =
           await this.playlist.generateDeltaPlaylist();
-        this.timeline.update(duration);
+        const event = new CustomEvent("duration-update", {
+          detail: { duration, startDate },
+        });
+        document.dispatchEvent(event);
         this.post({ filename, data });
       }
 
-      // if (e.data.type === "file-data") {
-      //   console.log("got file data: ", e.data);
-      // }
+      if (type === "gap-init") {
+        const data = getGapInit();
+        this.post({ data, filename });
+      }
+
+      if (type === "gap-segment") {
+        const data = getGapSegment();
+        this.post({ data, filename });
+      }
     });
   };
 

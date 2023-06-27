@@ -1,16 +1,52 @@
 import { FFmpeg, createFFmpeg } from "@ffmpeg/ffmpeg";
 import DB, { HlsDbItem } from "../DB";
 
+type PlaylistPayload = {
+  data: Uint8Array;
+  startDate?: string;
+  duration?: number;
+};
+
+// const GAP_SOURCE_INIT_FILENAME = "gapSourceInit.mp4";
+// const GAP_SOURCE_SEGMENT_FILENAME = "gapSourceSegment.m4s";
+// const IGNORED_FILENAME_PREFIX = "gapSource";
+// const IGNORED_FILENAMES = [
+//   GAP_SOURCE_INIT_FILENAME,
+//   GAP_SOURCE_SEGMENT_FILENAME,
+// ];
+
+const EIGHT_HOURS_IN_MS = 8 * 60 * 60 * 1000;
 const SEGMENT_LENGTH = 10000; // 10 seconds split into 2 second segment in Transcoder
-// const SEGMENT_LENGTH = 2000;
-const SEGMENT_INDEX_REGEX = /s(\d+)\.m4s/;
-const INIT_INDEX_REGEX = /i(\d+)\.mp4/;
+// const SEGMENT_INDEX_REGEX = /s(\d+)\.m4s/;
+// const INIT_INDEX_REGEX = /i(\d+)\.mp4/;
 const SEGMENT_DURATION_REGEX = /#EXTINF:([\d.]+),/g;
 // const TRANSCODER_RESET_TIME = 2 * 60000; // 2 minutes
-const TRANSCODER_RESET_TIME = 30000;
 
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
+
+const initPlaylistFallbackString = `#EXTM3U
+#EXT-X-TARGETDURATION:2
+#EXT-X-VERSION:9
+#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=12.0
+#EXT-X-DISCONTINUITY-SEQUENCE:0
+#EXT-X-MEDIA-SEQUENCE:0`;
+const deltaPlaylistFallbackString = `#EXTM3U
+#EXT-X-TARGETDURATION:2
+#EXT-X-VERSION:9
+#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=12.0
+#EXT-X-DISCONTINUITY-SEQUENCE:0
+#EXT-X-MEDIA-SEQUENCE:0
+#EXT-X-SKIP:SKIPPED-SEGMENTS=0`;
+
+const initPlaylistFallback = encoder.encode(initPlaylistFallbackString);
+const deltaPlaylistFallback = encoder.encode(deltaPlaylistFallbackString);
+
+let initGapData: Uint8Array;
+let segmentGapData: Uint8Array;
+
+export const getGapInit = () => initGapData;
+export const getGapSegment = () => segmentGapData;
 
 export default class Recorder {
   private mediaRecorder: MediaRecorder;
@@ -22,29 +58,25 @@ export default class Recorder {
   private hasCreatedInitFile = false;
   private isTranscoding = false;
 
-  //   private sourceDates: Date[] = [];
   private sourceDate: Date = new Date();
   private trancoderQue: Blob[] = [];
 
   db = new DB();
-  playlist = new Playlist(this.db);
+  private dbController = new DbController(this.db);
+  playlist = new Playlist(this.dbController);
   private transcoder = new Transcoder(this.playlist);
 
   status: "idle" | "recording" = "idle";
 
   init = async () => {
     await this.db.init();
-    await this.playlist.init();
     await this.transcoder.init();
-
-    // this.playlist.generatePlaylist();
-    // setTimeout(() => {
-    //   this.playlist.generateDeltaPlaylist();
-    // }, 1000);
+    await this.dbController.deleteOlderThan(EIGHT_HOURS_IN_MS);
+    await this.playlist.loadGapFiles();
   };
 
-  start = () => {
-    this.startRecordingSourceVideo();
+  start = async () => {
+    await this.startRecordingSourceVideo();
   };
 
   stop = () => {
@@ -60,8 +92,6 @@ export default class Recorder {
       return;
     }
 
-    // const sourceVideoDate = new Date();
-    // this.sourceDates.push(sourceVideoDate);
     this.mediaRecorder?.start();
 
     console.log("Called mediaRecorder.start()");
@@ -72,17 +102,21 @@ export default class Recorder {
     }, SEGMENT_LENGTH);
   };
 
-  private startRecordingSourceVideo = () => {
+  private startRecordingSourceVideo = async () => {
     if (this.status === "recording") return;
     console.log("Starting creating segments");
+    this.hasCreatedInitFile = false;
     this.status = "recording";
-    this.sourceDate = new Date();
+    const sourceDate = new Date();
+    this.sourceDate = sourceDate;
+    await this.dbController.fillSegmentGaps(sourceDate.toISOString());
+    await this.playlist.prepareNextUsableIndexes();
     this.createSourceVideo();
   };
 
   private onDataAvailable = async (event: BlobEvent) => {
     console.log("OnDataAvailable fired");
-    // const sourceVideoDate = this.sourceDates.shift()!;
+    this.dbController.deleteOlderThan(EIGHT_HOURS_IN_MS);
 
     if (this.isTranscoding) {
       console.log("Transcoding in progress, adding to que...");
@@ -124,6 +158,7 @@ export default class Recorder {
         rotation: "horizontal",
         duration: null,
         discontinuity: false,
+        isGap: false,
         index,
       } as const;
       await this.db.getWrite()(initPayload);
@@ -131,7 +166,6 @@ export default class Recorder {
     }
 
     const segmentStartIndex = this.playlist.getLatestSegmentIndex();
-    // const segmentStartDate = new Date(sourceVideoDate);
     const write = this.db.getWrite();
 
     let i = 0;
@@ -145,6 +179,7 @@ export default class Recorder {
         createdAt: this.sourceDate.toISOString(),
         rotation: "horizontal",
         discontinuity: i === 0,
+        isGap: false,
         index,
       } as const;
       await write(segmentPayload);
@@ -162,7 +197,7 @@ export default class Recorder {
 }
 
 export class Playlist {
-  constructor(private db: DB) {}
+  constructor(private dbController: DbController) {}
   private latestSegmentIndex = 0;
   private latestInitIndex = 0;
   lastSentSegment: HlsDbItem | null = null;
@@ -174,61 +209,27 @@ export class Playlist {
     duration: number;
   } | null = null;
   discontinuitySequence: number = 0;
-  //   name = "playlist.m3u8";
 
-  init = async () => {
-    const { initIndex, segmentIndex } = await this.populateInitialIndexes();
+  loadGapFiles = async () => {
+    const initResponse = await fetch("/gap.mp4");
+    const initBuffer = await initResponse.arrayBuffer();
+    const initData = new Uint8Array(initBuffer);
+
+    const segmentResponse = await fetch("/gap0.m4s");
+    const segmentBuffer = await segmentResponse.arrayBuffer();
+    const segmentData = new Uint8Array(segmentBuffer);
+
+    initGapData = initData;
+    segmentGapData = segmentData;
+  };
+
+  prepareNextUsableIndexes = async () => {
+    const { initIndex, segmentIndex } =
+      await this.dbController.getNextUsableIndexes();
     this.latestInitIndex = initIndex;
     this.latestSegmentIndex = segmentIndex;
     console.log("Initial init index ", this.latestInitIndex);
     console.log("Initial segment index ", this.latestSegmentIndex);
-  };
-
-  private populateInitialIndexes = () => {
-    const cursor = this.db.getCursor("createdAt");
-    const request = cursor.openCursor(null, "prev");
-
-    let segmentIndex: number;
-    let initIndex: number;
-
-    return new Promise<{ segmentIndex: number; initIndex: number }>(
-      (resolve, reject) => {
-        request.onsuccess = (e) => {
-          const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
-          if (cursor) {
-            const record = cursor.value as HlsDbItem;
-            if (!segmentIndex && record.filename.startsWith("s")) {
-              segmentIndex = record.index + 1;
-            }
-            if (!initIndex && record.filename.startsWith("i")) {
-              initIndex = record.index + 1;
-            }
-
-            if (segmentIndex != null && initIndex != null) {
-              console.log(
-                "Found both indexes ",
-                initIndex,
-                "and",
-                segmentIndex
-              );
-              resolve({ segmentIndex, initIndex });
-            } else {
-              cursor.continue();
-            }
-          } else {
-            console.log("Cursor finished");
-            resolve({
-              segmentIndex: segmentIndex || 0,
-              initIndex: initIndex || 0,
-            });
-          }
-        };
-        request.onerror = (e) => {
-          console.log("Cursor failed: ", e);
-          reject();
-        };
-      }
-    );
   };
 
   private createDiscontinuity = (programDate: string) =>
@@ -238,19 +239,14 @@ export class Playlist {
   private createInit = (filename: string, programDate: string) =>
     `#EXT-X-PROGRAM-DATE-TIME:${programDate}\n#EXT-X-MAP:URI="${filename}"`;
 
-  private getSegmentFile = (direction: IDBCursorDirection) => {
-    const index = this.db.getCursor("createdAt");
-    const request = index.openCursor(null, direction);
-    return new Promise<HlsDbItem>((resolve) => {
-      request.onsuccess = (e) => {
-        const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
-        if (cursor) {
-          const file = cursor.value as HlsDbItem;
-          if (file.filename.startsWith("s")) resolve(file);
-          else cursor.continue();
-        }
-      };
-    });
+  private createPayload = ({
+    data,
+    startDate = new Date().toISOString(),
+    duration = 0,
+  }: PlaylistPayload) => {
+    const payload = { data, startDate, duration };
+    this.lastSentDeltaPlaylist = payload;
+    return payload;
   };
 
   generatePlaylist = async () => {
@@ -261,13 +257,13 @@ export class Playlist {
 #EXT-X-DISCONTINUITY-SEQUENCE:0
 #EXT-X-MEDIA-SEQUENCE:SEQUENCE_PLACEHOLDER`;
 
-    const index = this.db.getCursor("createdAt");
-    const request = index.openCursor(null, "next");
+    const request = this.dbController.getCursor("readonly", [null, "next"]);
 
     let oldestSegment: HlsDbItem;
 
     let playlist = playlistBase;
     let sequenceNumber: string;
+    let playlistDurationInSec = 0;
 
     return new Promise<{
       data: Uint8Array;
@@ -279,9 +275,10 @@ export class Playlist {
         if (cursor) {
           const file = cursor.value as HlsDbItem;
           const { discontinuity, duration, filename, createdAt, index } = file;
-          const isInit = filename.startsWith("i");
+          const isInit = filename.endsWith(".mp4");
 
           let playlistUpdate = "";
+
           if (isInit) {
             playlistUpdate = this.createInit(filename, createdAt);
             this.lastSentInit = file;
@@ -301,6 +298,7 @@ export class Playlist {
               this.discontinuitySequence++;
             }
             playlistUpdate += this.createSegment(filename, duration!);
+            playlistDurationInSec += Number(duration);
           }
 
           playlist = playlist.concat("\n" + playlistUpdate);
@@ -311,16 +309,19 @@ export class Playlist {
 
           const encodedPlaylist = encoder.encode(playlist);
 
-          const payload = {
-            data: encodedPlaylist,
-            startDate: oldestSegment.createdAt,
-            duration:
-              new Date(
-                this.lastSentSegment?.createdAt || new Date()
-              ).getTime() - new Date(oldestSegment.createdAt).getTime(),
-          };
-          this.lastSentDeltaPlaylist = payload;
-          resolve(payload);
+          const hadSegments = Boolean(oldestSegment);
+          if (!hadSegments) {
+            resolve(this.createPayload({ data: initPlaylistFallback }));
+            return;
+          }
+
+          resolve(
+            this.createPayload({
+              data: encodedPlaylist,
+              startDate: oldestSegment.createdAt,
+              duration: playlistDurationInSec * 1000,
+            })
+          );
         }
       };
     });
@@ -331,16 +332,16 @@ export class Playlist {
       console.log("Reusing old delta update...");
       return this.lastSentDeltaPlaylist;
     }
-    const oldestSegment = await this.getSegmentFile("next");
-    const cursor = this.db.getCursor("createdAt");
-    const request = cursor.openCursor(null, "prev");
+
+    const oldestSegment = await this.dbController.getSegmentFile("next");
+    const request = this.dbController.getCursor("readonly", [null, "prev"]);
 
     const playlistBase = `#EXTM3U
 #EXT-X-TARGETDURATION:2
 #EXT-X-VERSION:9
 #EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=12.0
 #EXT-X-DISCONTINUITY-SEQUENCE:${this.discontinuitySequence}
-#EXT-X-MEDIA-SEQUENCE:${oldestSegment.index}
+#EXT-X-MEDIA-SEQUENCE:${oldestSegment?.index || 0}
 #EXT-X-SKIP:SKIPPED-SEGMENTS=SKIPPED_PLACEHOLDER`;
 
     let playlist = playlistBase;
@@ -356,55 +357,67 @@ export class Playlist {
       startDate: string;
     }>((resolve) => {
       const finish = () => {
+        const hadFiles = files.length !== 0;
         let indexHelper = 0;
 
-        files.unshift(this.lastSentInit!);
-        files.forEach((file) => {
-          const { discontinuity, duration, filename, createdAt, index } = file;
-          const isInit = filename.startsWith("i");
+        if (hadFiles) {
+          files.unshift(this.lastSentInit!);
+          files.forEach((file) => {
+            const { discontinuity, duration, filename, createdAt, index } =
+              file;
+            const isInit = filename.endsWith(".mp4");
 
-          let playlistUpdate = "";
-          if (isInit) {
-            this.lastSentInit = file;
-            playlistUpdate = this.createInit(filename, createdAt);
-          } else {
-            if (file.index < indexHelper) {
-              console.error(
-                `WRONG ORDER current is ${file.index} and prev is ${indexHelper}}`
-              );
+            let playlistUpdate = "";
+            if (isInit) {
+              this.lastSentInit = file;
+              playlistUpdate = this.createInit(filename, createdAt);
+            } else {
+              if (file.index < indexHelper) {
+                console.error(
+                  `WRONG ORDER current is ${file.index} and prev is ${indexHelper}}`
+                );
+              }
+              indexHelper = file.index;
+              this.lastSentSegment = file;
+              skipNumber = (index - (oldestSegment?.index || 0)).toString();
+              playlist = playlist.replaceAll("SKIPPED_PLACEHOLDER", skipNumber);
+              if (discontinuity) {
+                this.discontinuitySequence++;
+                playlistUpdate = this.createDiscontinuity(createdAt);
+              }
+              playlistUpdate += this.createSegment(filename, duration!);
             }
-            indexHelper = file.index;
-            this.lastSentSegment = file;
-            skipNumber = (index - oldestSegment.index).toString();
-            playlist = playlist.replaceAll("SKIPPED_PLACEHOLDER", skipNumber);
-            if (discontinuity) {
-              this.discontinuitySequence++;
-              playlistUpdate = this.createDiscontinuity(createdAt);
-            }
-            playlistUpdate += this.createSegment(filename, duration!);
-          }
 
-          playlist = playlist.concat("\n" + playlistUpdate);
-        });
-
+            playlist = playlist.concat("\n" + playlistUpdate);
+          });
+        }
         console.log("Created DELTA playlist ", playlist);
         const encodedPlaylist = encoder.encode(playlist);
 
-        const payload = {
-          data: encodedPlaylist,
-          startDate: oldestSegment.createdAt,
-          duration:
-            new Date(this.lastSentSegment?.createdAt || new Date()).getTime() -
-            new Date(oldestSegment.createdAt).getTime(),
-        };
-        this.lastSentDeltaPlaylist = payload;
-        resolve(payload);
+        if (!hadFiles) {
+          resolve(this.createPayload({ data: deltaPlaylistFallback }));
+          return;
+        }
+
+        const playlistDuration =
+          new Date(this.lastSentSegment?.createdAt || new Date()).getTime() +
+          Number(this.lastSentSegment?.duration || 0) * 1000 -
+          new Date(oldestSegment?.createdAt || new Date()).getTime();
+
+        resolve(
+          this.createPayload({
+            data: encodedPlaylist,
+            startDate: oldestSegment?.createdAt,
+            duration: playlistDuration,
+          })
+        );
       };
 
       request.onsuccess = (e) => {
         const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
         if (cursor) {
           const file = cursor.value as HlsDbItem;
+
           const fileDate = new Date(file.createdAt);
           fileDate.setMilliseconds(0);
 
@@ -442,12 +455,10 @@ export class Playlist {
 
   addToNextSegmentIndex = (segmentIndex: number) => {
     this.latestSegmentIndex += segmentIndex;
-    // console.log("Updated latestSegmentIndex: ", this.latestSegmentIndex);
   };
 
   addToNextInitIndex = (initIndex: number) => {
     this.latestInitIndex += initIndex;
-    // console.log("Updated latestInitIndex: ", this.latestInitIndex);
   };
 
   private getNextSafeInteger = (integer: number) => {
@@ -501,21 +512,16 @@ export class Transcoder {
     return segmentNumberA - segmentNumberB;
   };
 
-  private filterZeroTimeSegments = (segmentDurations: string[]) => {
-    return (filename: string, index: number) => {
-      const duration = segmentDurations[index];
-      return Number(duration) > 0.1;
-    };
-  };
-
-  private refreshInstance = () => {
-    const now = new Date().getTime();
-    if (this.initDate.getTime() + TRANSCODER_RESET_TIME < now) {
-      console.log("Creating new FFMPEG instance");
-      this.create();
-      this.initDate = new Date();
-    }
-  };
+  // private refreshInstance = async () => {
+  //   const now = new Date().getTime();
+  //   if (this.initDate.getTime() + TRANSCODER_RESET_TIME < now) {
+  //     console.log("Creating new FFMPEG instance");
+  //     this.ffmpeg.exit();
+  //     this.ffmpeg = null!;
+  //     await this.init();
+  //     this.initDate = new Date();
+  //   }
+  // };
 
   transcode = async ({
     blob,
@@ -564,8 +570,6 @@ export class Transcoder {
 
     const ffmpegFilenames = this.ffmpeg.FS("readdir", "/");
     const playlistData = this.ffmpeg.FS("readFile", "playlist.m3u8");
-    // console.log("Generated playlist: ", decoder.decode(playlistData));
-    // console.log(ffmpegFilenames);
 
     const segmentFilenames = ffmpegFilenames
       .filter((file) => file.includes("segment"))
@@ -574,14 +578,8 @@ export class Transcoder {
     const segmentDurations = this.playlist.getDurationsForSegmentsFromPlaylist(
       decoder.decode(playlistData)
     );
-    // console.log("segment durations: ", segmentDurations);
-    // console.log("for files: ", segmentFilenames);
 
-    const nonZeroSegmentsFilenames = segmentFilenames.filter(
-      this.filterZeroTimeSegments(segmentDurations)
-    );
-
-    const segmentsData = nonZeroSegmentsFilenames.map((filename, index) => {
+    const segmentsData = segmentFilenames.map((filename, index) => {
       const data = this.ffmpeg.FS("readFile", filename);
       this.ffmpeg.FS("unlink", filename);
 
@@ -599,13 +597,176 @@ export class Transcoder {
     this.ffmpeg.FS("unlink", "playlist.m3u8");
     this.ffmpeg.FS("unlink", "init.mp4");
 
-    // console.log("Files after transcoding: ", this.ffmpeg.FS("readdir", "/"));
-
+    // await this.refreshInstance();
     this.ffmpeg.exit();
-    this.refreshInstance();
     return {
       segmentsData,
       initData,
     };
+  };
+}
+
+class DbController {
+  constructor(private db: DB) {
+    this.db = db;
+  }
+
+  getCursor = (
+    mode: IDBTransactionMode = "readonly",
+    cursorOptions: Parameters<IDBObjectStore["openCursor"]>
+  ) => {
+    const index = this.db.createTransaction(mode);
+    const request = index.openCursor(...cursorOptions);
+    return request;
+  };
+
+  deleteOlderThan = (time: number) => {
+    const upperBound = new Date(Date.now() - time).toISOString();
+    const range = IDBKeyRange.upperBound(upperBound);
+
+    const objectStore = this.db.createTransaction("readwrite");
+    const index = objectStore.index("createdAt");
+    const request = index.openCursor(range);
+
+    return new Promise((resolve) => {
+      request.onsuccess = (e) => {
+        const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
+        if (cursor) {
+          const record = cursor.value as HlsDbItem;
+          console.warn("Deleting ", record.filename);
+          cursor.delete();
+          cursor.continue();
+        } else resolve(1);
+      };
+      request.onerror = (e) => console.log("'deleteOlderThan' failed data ", e);
+    });
+  };
+
+  fillSegmentGaps = async (date: string) => {
+    const oldestSegment = await this.getSegmentFile("prev");
+    if (!oldestSegment) {
+      console.log("Not adding any gaps");
+      return;
+    }
+
+    const { createdAt, duration } = oldestSegment;
+    const gapStartTime =
+      new Date(createdAt).getTime() + Number(duration) * 1000;
+    const gapEndTime = new Date(date).getTime();
+
+    const timeDifference = gapEndTime - gapStartTime;
+
+    let seconds = timeDifference / 1000;
+    const gaps: number[] = [];
+
+    while (seconds >= 2) {
+      gaps.push(2);
+      seconds -= 2;
+    }
+    if (seconds > 0) gaps.push(seconds);
+
+    const { initIndex, segmentIndex: startSegmentIndex } =
+      await this.getNextUsableIndexes();
+
+    const startDate = new Date(gapStartTime);
+    const initPayload: HlsDbItem = {
+      filename: `g${initIndex}.mp4`,
+      index: initIndex,
+      createdAt: startDate.toISOString(),
+      data: new Uint8Array(),
+      discontinuity: false,
+      duration: null,
+      isGap: false,
+      rotation: "horizontal",
+    };
+
+    const write = this.db.getWrite();
+    await write(initPayload);
+
+    let segmentIndex = startSegmentIndex;
+    const segmentDate = startDate;
+
+    console.log("gaps: ", gaps);
+
+    for (const gapDuration of gaps) {
+      const payload: HlsDbItem = {
+        filename: `g${segmentIndex}.m4s`,
+        index: segmentIndex,
+        createdAt: new Date(segmentDate).toISOString(),
+        data: new Uint8Array(),
+        discontinuity: true,
+        duration: gapDuration.toFixed(6),
+        isGap: true,
+        rotation: "horizontal",
+      };
+
+      await write(payload);
+
+      segmentDate.setMilliseconds(
+        segmentDate.getMilliseconds() + gapDuration * 1000
+      );
+      segmentIndex++;
+    }
+  };
+
+  getSegmentFile = (direction: IDBCursorDirection) => {
+    const request = this.getCursor("readonly", [null, direction]);
+
+    return new Promise<HlsDbItem | null>((resolve) => {
+      request.onsuccess = (e) => {
+        const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
+        if (cursor) {
+          const file = cursor.value as HlsDbItem;
+          if (file.filename.endsWith(".m4s")) resolve(file);
+          else cursor.continue();
+        } else resolve(null);
+      };
+    });
+  };
+
+  getNextUsableIndexes = () => {
+    const request = this.getCursor("readonly", [null, "prev"]);
+
+    let segmentIndex: number;
+    let initIndex: number;
+
+    return new Promise<{ segmentIndex: number; initIndex: number }>(
+      (resolve, reject) => {
+        request.onsuccess = (e) => {
+          const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
+          if (cursor) {
+            const record = cursor.value as HlsDbItem;
+            if (!segmentIndex && record.filename.endsWith(".m4s")) {
+              segmentIndex = record.index + 1;
+            }
+            if (!initIndex && record.filename.endsWith(".mp4")) {
+              initIndex = record.index + 1;
+            }
+
+            if (segmentIndex != null && initIndex != null) {
+              console.log(
+                "Found both indexes ",
+                initIndex,
+                "and",
+                segmentIndex
+              );
+              resolve({ segmentIndex, initIndex });
+            } else {
+              cursor.continue();
+            }
+          } else {
+            console.log("Cursor finished");
+            resolve({
+              segmentIndex: segmentIndex || 0,
+              initIndex: initIndex || 0,
+            });
+          }
+        };
+        request.onerror = (e) => {
+          console.log("Cursor failed: ", e);
+          reject();
+        };
+      }
+    );
   };
 }
