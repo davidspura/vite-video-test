@@ -1,9 +1,8 @@
 import { loadPreview } from "../utils";
 import Recorder from "../final/Recorder";
-import { createFFmpeg } from "@ffmpeg/ffmpeg";
+// import { createFFmpeg } from "@ffmpeg/ffmpeg";
 
 import SW from "../SW";
-import { Timeline } from "../Player";
 
 type HlsDbItem = {
   filename: string;
@@ -19,15 +18,15 @@ type HlsDbPlaylist = {
   rotation: "horizontal";
 };
 
-const ffmpeg = createFFmpeg({ log: false });
-if (!ffmpeg.isLoaded())
-  ffmpeg.load().then(() => {
-    console.log("ffmpeg appended to window");
-  });
-window.ffmpeg = ffmpeg;
+// const ffmpeg = createFFmpeg({ log: false });
+// if (!ffmpeg.isLoaded())
+//   ffmpeg.load().then(() => {
+//     console.log("ffmpeg appended to window");
+//   });
+// window.ffmpeg = ffmpeg;
 
-export default async function createMediaRecorder(timeline: Timeline) {
-  const sw = new SW(timeline);
+export default async function createMediaRecorder() {
+  const sw = new SW();
   const stream = await loadPreview();
   const recorder = new Recorder(stream);
 

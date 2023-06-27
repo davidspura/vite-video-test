@@ -4,7 +4,7 @@ declare global {
     db: any;
     download: any;
     writeToDb: any;
-    ffmpeg: any;
+    // ffmpeg: any;
   }
 }
 
