@@ -53,7 +53,7 @@ function App() {
         liveui: true,
       });
       player.play();
-    }, 30000);
+    }, 20000);
   };
 
   return (

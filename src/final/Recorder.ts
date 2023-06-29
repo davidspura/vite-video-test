@@ -22,19 +22,22 @@ const SEGMENT_LENGTH = 10000; // 10 seconds split into 2 second segment in Trans
 const SEGMENT_DURATION_REGEX = /#EXTINF:([\d.]+),/g;
 const TRANSCODER_RESET_TIME = 15 * 60000; // 15 minutes
 
+const TARGETDURATION = 5;
+const CANSKIP = (TARGETDURATION * 6).toFixed(1);
+
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
 
 const initPlaylistFallbackString = `#EXTM3U
-#EXT-X-TARGETDURATION:2
+#EXT-X-TARGETDURATION:${TARGETDURATION}
 #EXT-X-VERSION:9
-#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=12.0
+#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=${CANSKIP}
 #EXT-X-DISCONTINUITY-SEQUENCE:0
 #EXT-X-MEDIA-SEQUENCE:0`;
 const deltaPlaylistFallbackString = `#EXTM3U
-#EXT-X-TARGETDURATION:2
+#EXT-X-TARGETDURATION:${TARGETDURATION}
 #EXT-X-VERSION:9
-#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=12.0
+#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=${CANSKIP}
 #EXT-X-DISCONTINUITY-SEQUENCE:0
 #EXT-X-MEDIA-SEQUENCE:0
 #EXT-X-SKIP:SKIPPED-SEGMENTS=0`;
@@ -51,7 +54,10 @@ export const getGapSegment = () => segmentGapData;
 export default class Recorder {
   private mediaRecorder: MediaRecorder;
   constructor(private stream: MediaStream) {
-    this.mediaRecorder = new MediaRecorder(this.stream);
+    this.mediaRecorder = new MediaRecorder(this.stream, {
+      mimeType: "video/webm; codecs=h264",
+      // mimeType: "video/mp4",
+    });
     this.mediaRecorder.addEventListener("dataavailable", this.onDataAvailable);
   }
   private timeout: number | null = null;
@@ -115,6 +121,16 @@ export default class Recorder {
   };
 
   private onDataAvailable = async (event: BlobEvent) => {
+    // const url = URL.createObjectURL(
+    //   new Blob([event.data], { type: "video/webm" })
+    // );
+    // const a = document.createElement("a");
+    // a.href = url;
+    // a.download = "video.webm";
+    // a.click();
+    // a.remove();
+    // URL.revokeObjectURL(url);
+
     console.log("OnDataAvailable fired");
     this.dbController.deleteOlderThan(EIGHT_HOURS_IN_MS);
 
@@ -251,9 +267,9 @@ export class Playlist {
 
   generatePlaylist = async () => {
     const playlistBase = `#EXTM3U
-#EXT-X-TARGETDURATION:2
+#EXT-X-TARGETDURATION:${TARGETDURATION}
 #EXT-X-VERSION:9
-#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=12.0
+#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=${CANSKIP}
 #EXT-X-DISCONTINUITY-SEQUENCE:0
 #EXT-X-MEDIA-SEQUENCE:SEQUENCE_PLACEHOLDER`;
 
@@ -337,9 +353,9 @@ export class Playlist {
     const request = this.dbController.getCursor("readonly", [null, "prev"]);
 
     const playlistBase = `#EXTM3U
-#EXT-X-TARGETDURATION:2
+#EXT-X-TARGETDURATION:${TARGETDURATION}
 #EXT-X-VERSION:9
-#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=12.0
+#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=${CANSKIP}
 #EXT-X-DISCONTINUITY-SEQUENCE:${this.discontinuitySequence}
 #EXT-X-MEDIA-SEQUENCE:${oldestSegment?.index || 0}
 #EXT-X-SKIP:SKIPPED-SEGMENTS=SKIPPED_PLACEHOLDER`;
@@ -349,7 +365,7 @@ export class Playlist {
     let files: HlsDbItem[] = [];
 
     const stopDate = new Date(this.lastSentSegment?.createdAt || new Date());
-    stopDate.setSeconds(stopDate.getSeconds() - 12);
+    stopDate.setSeconds(stopDate.getSeconds() - Number(CANSKIP));
 
     return new Promise<{
       data: Uint8Array;
@@ -545,23 +561,24 @@ export class Transcoder {
     const arrayBuffer = await blob.arrayBuffer();
     this.ffmpeg.FS("writeFile", "input.webm", new Uint8Array(arrayBuffer));
 
+    // "h264",
     const options = [
       "-i",
       "input.webm",
       "-c:a",
       "aac",
       "-c:v",
-      "h264",
+      "copy",
       "-hls_time",
-      "2",
+      String(TARGETDURATION),
       "-hls_list_size",
       "0",
       "-hls_flags",
       "omit_endlist",
       "-hls_segment_type",
       "fmp4",
-      "-force_key_frames",
-      "expr:gte(t,n_forced*1)",
+      // "-force_key_frames",
+      // "expr:gte(t,n_forced*1)",
       "-hls_segment_filename",
       "segment%01d.m4s",
       "-hls_fmp4_init_filename",
@@ -664,9 +681,9 @@ class DbController {
     let seconds = timeDifference / 1000;
     const gaps: number[] = [];
 
-    while (seconds >= 2) {
-      gaps.push(2);
-      seconds -= 2;
+    while (seconds >= TARGETDURATION) {
+      gaps.push(TARGETDURATION);
+      seconds -= TARGETDURATION;
     }
     if (seconds > 0) gaps.push(seconds);
 
