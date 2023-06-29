@@ -1,4 +1,4 @@
-import { Box, chakra } from "@chakra-ui/react";
+import { Box, Flex, chakra } from "@chakra-ui/react";
 import { useRef, useEffect } from "react";
 import { HlsDbItem } from "./DB";
 
@@ -82,10 +82,11 @@ const TestTimeline = ({ canStart }: { canStart: boolean }) => {
   }, []);
 
   const onTimeUpdate = () => {
-    if (!videoRef.current || !indicator.current) return;
+    if (!videoRef.current || !indicator.current || !timeline.current) return;
     const time = videoRef.current.currentTime;
     const currentTime = time * 0.8;
-    indicator.current.style.left = `${currentTime}px`;
+    // indicator.current.style.left = `${currentTime}px`;
+    timeline.current.style.left = `-${currentTime}px`;
   };
 
   if (!canStart) return null;
@@ -103,31 +104,25 @@ const TestTimeline = ({ canStart }: { canStart: boolean }) => {
       >
         <source src="/playlist.m3u8" type="application/x-mpegURL" />
       </Video>
-      <Box maxW="100vw" overflow="scroll" mt="4rem" py="2rem">
+      <Flex maxW="100vw" mt="4rem" pos="relative" mb="8rem" justify="center">
         {/* <canvas ref={canvasRef} height="200" /> */}
-        <Box
-          ref={timeline}
-          h="48px"
-          bg="blackAlpha.700"
-          w="0px"
-          // w="48px"
-          bgImage="/IntervalR.svg"
-          bgRepeat="repeat-x"
-          pos="relative"
-          sx={{ backgroundPositionY: "center" }}
-        >
+        <Box ref={indicator} w="4px" h="60px" bg="blue" pos="relative">
           <Box
-            ref={indicator}
-            w="4px"
-            h="60px"
-            bg="blue"
+            ref={timeline}
+            h="48px"
+            bg="blackAlpha.700"
+            // w="0px"
+            w="48px"
+            left="0px"
             pos="absolute"
-            left="0"
             top="50%"
-            transform="translate(-50%, -50%)"
+            transform="translate(2px, -50%)"
+            bgImage="/IntervalR.svg"
+            bgRepeat="repeat-x"
+            sx={{ backgroundPositionY: "center" }}
           />
         </Box>
-      </Box>
+      </Flex>
     </>
   );
 };
