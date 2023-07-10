@@ -52,6 +52,10 @@ function App() {
       const player = videojs("playlist_video", {
         liveui: true,
       });
+      player.src({
+        src: "/playlist.m3u8",
+        type: "application/x-mpegURL",
+      });
       player.play();
     }, 20000);
   };

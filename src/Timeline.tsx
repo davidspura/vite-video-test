@@ -1,5 +1,5 @@
 import { Box, Flex, chakra } from "@chakra-ui/react";
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, MouseEvent } from "react";
 import { HlsDbItem } from "./DB";
 
 const Video = chakra("video");
@@ -12,43 +12,6 @@ const TestTimeline = ({ canStart }: { canStart: boolean }) => {
   const timeline = useRef<HTMLDivElement>(null);
   const indicator = useRef<HTMLDivElement>(null);
   const timelineStartDate = useRef<string | null>(null);
-
-  useEffect(() => {
-    if (!canStart || !canvasRef.current) return;
-    const canvas = canvasRef.current!;
-    const ctx = canvas.getContext("2d")!;
-    let x = 1;
-    const y = 100;
-    // should be 8px but line is 2px wide and gets rendered in the center, so it shaves off 1px on each side
-    const lineSpacing = 10;
-    const lineLength = 5;
-    const numLines = MAX_TIMELINE_LENGTH_IN_SEC / SECONDS_BETWEEN_LINES;
-    const totalWidth = lineSpacing * numLines;
-    canvasRef.current!.width = totalWidth;
-
-    for (let i = 0; i < numLines; i++) {
-      const makeBiggerLine = i % 6 === 0;
-      ctx.beginPath();
-      ctx.moveTo(x, makeBiggerLine ? 95 : y);
-      ctx.lineTo(x, y + (makeBiggerLine ? 10 : lineLength));
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      x += lineSpacing;
-    }
-
-    const onClick = (e: MouseEvent) => {
-      const rect = canvas.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      // const lineIndex = Math.floor(mouseX / lineSpacing);
-      const lineWidthOffset = 2;
-      console.log(mouseX - lineWidthOffset);
-    };
-
-    canvas.addEventListener("click", onClick);
-    return () => {
-      canvas.removeEventListener("click", onClick);
-    };
-  }, [canStart]);
 
   useEffect(() => {
     const onDurationUpdate = (e: Event) => {
@@ -90,6 +53,16 @@ const TestTimeline = ({ canStart }: { canStart: boolean }) => {
   };
 
   if (!canStart) return null;
+
+  const onTimelineClick = (e: MouseEvent) => {
+    if (!timeline.current || !videoRef.current) return;
+    const rect = timeline.current.getBoundingClientRect();
+    const mouseX = (e.clientX + 1) * 1.25 - rect.left * 1.25;
+
+    console.log("Setting new player time: ", mouseX);
+    videoRef.current.currentTime = mouseX;
+  };
+
   return (
     <>
       <Video
@@ -101,9 +74,11 @@ const TestTimeline = ({ canStart }: { canStart: boolean }) => {
         muted
         data-setup="{}"
         onTimeUpdate={onTimeUpdate}
-      >
-        <source src="/playlist.m3u8" type="application/x-mpegURL" />
-      </Video>
+        maxW="100vw"
+        onError={(e) => console.log("CRASHED ", e)}
+      />
+
+      {/* </Video> */}
       <Flex maxW="100vw" mt="4rem" pos="relative" mb="8rem" justify="center">
         {/* <canvas ref={canvasRef} height="200" /> */}
         <Box ref={indicator} w="4px" h="60px" bg="blue" pos="relative">
@@ -120,6 +95,7 @@ const TestTimeline = ({ canStart }: { canStart: boolean }) => {
             bgImage="/IntervalR.svg"
             bgRepeat="repeat-x"
             sx={{ backgroundPositionY: "center" }}
+            onClick={onTimelineClick}
           />
         </Box>
       </Flex>
