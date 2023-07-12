@@ -22,7 +22,7 @@ const SEGMENT_LENGTH = 10000; // 10 seconds split into 2 second segment in Trans
 const SEGMENT_DURATION_REGEX = /#EXTINF:([\d.]+),/g;
 const TRANSCODER_RESET_TIME = 15 * 60000; // 15 minutes
 
-const TARGETDURATION = 5;
+const TARGETDURATION = 2;
 const CANSKIP = (TARGETDURATION * 6).toFixed(1);
 
 const decoder = new TextDecoder();
@@ -132,7 +132,9 @@ export default class Recorder {
     // URL.revokeObjectURL(url);
 
     console.log("OnDataAvailable fired");
-    this.dbController.deleteOlderThan(EIGHT_HOURS_IN_MS);
+    this.dbController.deleteOlderThan(EIGHT_HOURS_IN_MS, () => {
+      this.playlist.discontinuitySequence += 1;
+    });
 
     if (this.isTranscoding) {
       console.log("Transcoding in progress, adding to que...");
@@ -561,24 +563,24 @@ export class Transcoder {
     const arrayBuffer = await blob.arrayBuffer();
     this.ffmpeg.FS("writeFile", "input.webm", new Uint8Array(arrayBuffer));
 
-    // "h264",
     const options = [
       "-i",
       "input.webm",
       "-c:a",
       "aac",
       "-c:v",
-      "copy",
+      // "copy",
+      "h264",
       "-hls_time",
-      String(TARGETDURATION),
+      "2",
       "-hls_list_size",
       "0",
       "-hls_flags",
       "omit_endlist",
       "-hls_segment_type",
       "fmp4",
-      // "-force_key_frames",
-      // "expr:gte(t,n_forced*1)",
+      "-force_key_frames",
+      "expr:gte(t,n_forced*1)",
       "-hls_segment_filename",
       "segment%01d.m4s",
       "-hls_fmp4_init_filename",
@@ -642,7 +644,7 @@ class DbController {
     return request;
   };
 
-  deleteOlderThan = (time: number) => {
+  deleteOlderThan = (time: number, onDiscontinuityDelete?: () => void) => {
     const upperBound = new Date(Date.now() - time).toISOString();
     const range = IDBKeyRange.upperBound(upperBound);
 
@@ -656,6 +658,9 @@ class DbController {
         if (cursor) {
           const record = cursor.value as HlsDbItem;
           console.warn("Deleting ", record.filename);
+          if (record.discontinuity && onDiscontinuityDelete) {
+            onDiscontinuityDelete();
+          }
           cursor.delete();
           cursor.continue();
         } else resolve(1);
