@@ -61,3 +61,13 @@ export default async function createMediaRecorder() {
 
   return recorder;
 }
+
+// const url = URL.createObjectURL(
+//   new Blob([event.data], { type: "video/webm" })
+// );
+// const a = document.createElement("a");
+// a.href = url;
+// a.download = "video.webm";
+// a.click();
+// a.remove();
+// URL.revokeObjectURL(url);
