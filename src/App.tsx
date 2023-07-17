@@ -29,35 +29,36 @@ function App() {
   }, []);
 
   const startPlayer = () => {
-    setTimeout(() => {
-      // const player =
-      //   videojs.getPlayer("playlist_video") || videojs("playlist_video");
-      // player.options({
-      //   liveui: true,
-      //   html5: {
-      //     vhs: {
-      //       overrideNative: true,
-      //       // maxPlaylistRetries: 200,
-      //       // allowSeeksWithinUnsafeLiveWindow: true,
-      //       // handlePartialData: true,
-      //       liveRangeSafeTimeDelta: 10,
-      //     },
-      //     nativeAudioTracks: false,
-      //     nativeVideoTracks: false,
-      //   },
-      // });
-      // videojs.log.level("debug");
-      // player.reloadSourceOnError();
-
-      const player = videojs("playlist_video", {
-        liveui: true,
-      });
-      player.src({
-        src: "/playlist.m3u8",
-        type: "application/x-mpegURL",
-      });
-      player.play();
-    }, 20000);
+    // setTimeout(() => {
+    // const player =
+    //   videojs.getPlayer("playlist_video") || videojs("playlist_video");
+    // player.options({
+    //   liveui: true,
+    //   html5: {
+    //     vhs: {
+    //       overrideNative: true,
+    //       // maxPlaylistRetries: 200,
+    //       // allowSeeksWithinUnsafeLiveWindow: true,
+    //       // handlePartialData: true,
+    //       liveRangeSafeTimeDelta: 10,
+    //     },
+    //     nativeAudioTracks: false,
+    //     nativeVideoTracks: false,
+    //   },
+    // });
+    // videojs.log.level("debug");
+    // player.reloadSourceOnError();
+    // videojs.log.level("debug");
+    const player = videojs("playlist_video", {
+      liveui: true,
+    });
+    player.src({
+      src: "/playlist.m3u8",
+      type: "application/x-mpegURL",
+    });
+    player.play();
+    // }, 20000);
+    // }, 1000);
   };
 
   return (
@@ -69,7 +70,7 @@ function App() {
             startPlayer();
           }}
         >
-          Start
+          Start Recorder
         </Button>
         <Button onClick={recorder.current?.stop}>Stop</Button>
       </Flex>
