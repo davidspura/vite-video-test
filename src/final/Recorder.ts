@@ -7,43 +7,95 @@ type PlaylistPayload = {
   duration?: number;
 };
 
-// const GAP_SOURCE_INIT_FILENAME = "gapSourceInit.mp4";
-// const GAP_SOURCE_SEGMENT_FILENAME = "gapSourceSegment.m4s";
-// const IGNORED_FILENAME_PREFIX = "gapSource";
-// const IGNORED_FILENAMES = [
-//   GAP_SOURCE_INIT_FILENAME,
-//   GAP_SOURCE_SEGMENT_FILENAME,
-// ];
-
 const EIGHT_HOURS_IN_MS = 8 * 60 * 60 * 1000;
 const SEGMENT_LENGTH = 10000; // 10 seconds split into 2 second segment in Transcoder
-// const SEGMENT_INDEX_REGEX = /s(\d+)\.m4s/;
-// const INIT_INDEX_REGEX = /i(\d+)\.mp4/;
 const SEGMENT_DURATION_REGEX = /#EXTINF:([\d.]+),/g;
 const TRANSCODER_RESET_TIME = 15 * 60000; // 15 minutes
 
-const TARGETDURATION = 2;
-const CANSKIP = (TARGETDURATION * 6).toFixed(1);
+// const TARGETDURATION = 2;
+// const CANSKIP = (TARGETDURATION * 6).toFixed(1);
 
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
 
-const initPlaylistFallbackString = `#EXTM3U
-#EXT-X-TARGETDURATION:${TARGETDURATION}
+// const initPlaylistFallbackString = `#EXTM3U
+// #EXT-X-TARGETDURATION:${TARGETDURATION}
+// #EXT-X-VERSION:9
+// #EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=${CANSKIP}
+// #EXT-X-DISCONTINUITY-SEQUENCE:0
+// #EXT-X-MEDIA-SEQUENCE:0`;
+// const deltaPlaylistFallbackString = `#EXTM3U
+// #EXT-X-TARGETDURATION:${TARGETDURATION}
+// #EXT-X-VERSION:9
+// #EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=${CANSKIP}
+// #EXT-X-DISCONTINUITY-SEQUENCE:0
+// #EXT-X-MEDIA-SEQUENCE:0
+// #EXT-X-SKIP:SKIPPED-SEGMENTS=0`;
+
+// const initPlaylistFallback = encoder.encode(initPlaylistFallbackString);
+// const deltaPlaylistFallback = encoder.encode(deltaPlaylistFallbackString);
+
+const Settings = (function () {
+  let hasUpdated = false;
+  function getSkip(d: number) {
+    return (d * 6).toFixed(1);
+  }
+
+  let TARGETDURATION_ = 5;
+  let CANSKIP_ = getSkip(TARGETDURATION_);
+  let initPlaylistFallback_: Uint8Array;
+  let deltaPlaylistFallback_: Uint8Array;
+
+  function generateSettings(targetDuration = 2) {
+    TARGETDURATION_ = targetDuration;
+    CANSKIP_ = getSkip(TARGETDURATION_);
+    const initPlaylistFallbackString = `#EXTM3U
+#EXT-X-TARGETDURATION:${TARGETDURATION_}
 #EXT-X-VERSION:9
-#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=${CANSKIP}
+#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=${CANSKIP_}
 #EXT-X-DISCONTINUITY-SEQUENCE:0
 #EXT-X-MEDIA-SEQUENCE:0`;
-const deltaPlaylistFallbackString = `#EXTM3U
-#EXT-X-TARGETDURATION:${TARGETDURATION}
+    const deltaPlaylistFallbackString = `#EXTM3U
+#EXT-X-TARGETDURATION:${TARGETDURATION_}
 #EXT-X-VERSION:9
-#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=${CANSKIP}
+#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=${CANSKIP_}
 #EXT-X-DISCONTINUITY-SEQUENCE:0
 #EXT-X-MEDIA-SEQUENCE:0
 #EXT-X-SKIP:SKIPPED-SEGMENTS=0`;
 
-const initPlaylistFallback = encoder.encode(initPlaylistFallbackString);
-const deltaPlaylistFallback = encoder.encode(deltaPlaylistFallbackString);
+    initPlaylistFallback_ = encoder.encode(initPlaylistFallbackString);
+    deltaPlaylistFallback_ = encoder.encode(deltaPlaylistFallbackString);
+  }
+
+  const findAndUpdateLongestDuration = (durations: string[]) => {
+    if (hasUpdated) return;
+    let longetDuration = TARGETDURATION_;
+    durations.forEach((d) => {
+      const duration = Number(d);
+      if (duration > longetDuration) longetDuration = Math.ceil(duration);
+    });
+
+    console.log("Found longest duration: ", longetDuration, durations);
+    generateSettings(longetDuration);
+    hasUpdated = true;
+  };
+
+  return {
+    findAndUpdateLongestDuration,
+    get TARGETDURATION() {
+      return TARGETDURATION_;
+    },
+    get CANSKIP() {
+      return CANSKIP_;
+    },
+    get initPlaylistFallback() {
+      return initPlaylistFallback_;
+    },
+    get deltaPlaylistFallback() {
+      return deltaPlaylistFallback_;
+    },
+  };
+})();
 
 let initGapData: Uint8Array;
 let segmentGapData: Uint8Array;
@@ -262,6 +314,7 @@ export class Playlist {
     startDate = new Date().toISOString(),
     duration = 0,
   }: PlaylistPayload) => {
+    // playableTimeRanges = {start:number, end:number}[]
     const payload = { data, startDate, duration };
     this.lastSentDeltaPlaylist = payload;
     return payload;
@@ -269,9 +322,9 @@ export class Playlist {
 
   generatePlaylist = async () => {
     const playlistBase = `#EXTM3U
-#EXT-X-TARGETDURATION:${TARGETDURATION}
+#EXT-X-TARGETDURATION:${Settings.TARGETDURATION}
 #EXT-X-VERSION:9
-#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=${CANSKIP}
+#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=${Settings.CANSKIP}
 #EXT-X-DISCONTINUITY-SEQUENCE:0
 #EXT-X-MEDIA-SEQUENCE:SEQUENCE_PLACEHOLDER`;
 
@@ -329,7 +382,9 @@ export class Playlist {
 
           const hadSegments = Boolean(oldestSegment);
           if (!hadSegments) {
-            resolve(this.createPayload({ data: initPlaylistFallback }));
+            resolve(
+              this.createPayload({ data: Settings.initPlaylistFallback })
+            );
             return;
           }
 
@@ -355,9 +410,9 @@ export class Playlist {
     const request = this.dbController.getCursor("readonly", [null, "prev"]);
 
     const playlistBase = `#EXTM3U
-#EXT-X-TARGETDURATION:${TARGETDURATION}
+#EXT-X-TARGETDURATION:${Settings.TARGETDURATION}
 #EXT-X-VERSION:9
-#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=${CANSKIP}
+#EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=${Settings.CANSKIP}
 #EXT-X-DISCONTINUITY-SEQUENCE:${this.discontinuitySequence}
 #EXT-X-MEDIA-SEQUENCE:${oldestSegment?.index || 0}
 #EXT-X-SKIP:SKIPPED-SEGMENTS=SKIPPED_PLACEHOLDER`;
@@ -367,7 +422,7 @@ export class Playlist {
     let files: HlsDbItem[] = [];
 
     const stopDate = new Date(this.lastSentSegment?.createdAt || new Date());
-    stopDate.setSeconds(stopDate.getSeconds() - Number(CANSKIP));
+    stopDate.setSeconds(stopDate.getSeconds() - Number(Settings.CANSKIP));
 
     return new Promise<{
       data: Uint8Array;
@@ -413,7 +468,7 @@ export class Playlist {
         const encodedPlaylist = encoder.encode(playlist);
 
         if (!hadFiles) {
-          resolve(this.createPayload({ data: deltaPlaylistFallback }));
+          resolve(this.createPayload({ data: Settings.deltaPlaylistFallback }));
           return;
         }
 
@@ -554,11 +609,6 @@ export class Transcoder {
     includeInitData?: boolean;
   }) => {
     if (!this.ffmpeg) console.error("Ffmpeg not initialized");
-    // if (!this.ffmpeg.isLoaded()) {
-    //   console.time("Ffmpegloaded");
-    //   await this.ffmpeg.load();
-    //   console.timeEnd("Ffmpegloaded");
-    // }
 
     const arrayBuffer = await blob.arrayBuffer();
     this.ffmpeg.FS("writeFile", "input.webm", new Uint8Array(arrayBuffer));
@@ -569,8 +619,8 @@ export class Transcoder {
       "-c:a",
       "aac",
       "-c:v",
-      // "copy",
-      "h264",
+      "copy",
+      // "h264",
       "-hls_time",
       "2",
       "-hls_list_size",
@@ -579,8 +629,8 @@ export class Transcoder {
       "omit_endlist",
       "-hls_segment_type",
       "fmp4",
-      "-force_key_frames",
-      "expr:gte(t,n_forced*1)",
+      // "-force_key_frames",
+      // "expr:gte(t,n_forced*1)",
       "-hls_segment_filename",
       "segment%01d.m4s",
       "-hls_fmp4_init_filename",
@@ -602,6 +652,7 @@ export class Transcoder {
     const segmentDurations = this.playlist.getDurationsForSegmentsFromPlaylist(
       decoder.decode(playlistData)
     );
+    // Settings.findAndUpdateLongestDuration(segmentDurations);
 
     const segmentsData = segmentFilenames.map((filename, index) => {
       const data = this.ffmpeg.FS("readFile", filename);
@@ -622,7 +673,6 @@ export class Transcoder {
     this.ffmpeg.FS("unlink", "init.mp4");
 
     await this.refreshInstance();
-    // this.ffmpeg.exit();
     return {
       segmentsData,
       initData,
@@ -686,9 +736,9 @@ class DbController {
     let seconds = timeDifference / 1000;
     const gaps: number[] = [];
 
-    while (seconds >= TARGETDURATION) {
-      gaps.push(TARGETDURATION);
-      seconds -= TARGETDURATION;
+    while (seconds >= Settings.TARGETDURATION) {
+      gaps.push(Settings.TARGETDURATION);
+      seconds -= Settings.TARGETDURATION;
     }
     if (seconds > 0) gaps.push(seconds);
 
