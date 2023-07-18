@@ -41,7 +41,7 @@ const Settings = (function () {
     return (d * 6).toFixed(1);
   }
 
-  let TARGETDURATION_ = 5;
+  let TARGETDURATION_ = 7;
   let CANSKIP_ = getSkip(TARGETDURATION_);
   let initPlaylistFallback_: Uint8Array;
   let deltaPlaylistFallback_: Uint8Array;
