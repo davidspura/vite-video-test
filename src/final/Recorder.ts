@@ -97,12 +97,6 @@ const Settings = (function () {
   };
 })();
 
-let initGapData: Uint8Array;
-let segmentGapData: Uint8Array;
-
-export const getGapInit = () => initGapData;
-export const getGapSegment = () => segmentGapData;
-
 export default class Recorder {
   private mediaRecorder: MediaRecorder;
   constructor(private stream: MediaStream) {
@@ -280,6 +274,9 @@ export class Playlist {
   } | null = null;
   discontinuitySequence: number = 0;
 
+  initGapData!: Uint8Array;
+  segmentGapData!: Uint8Array;
+
   loadGapFiles = async () => {
     const initResponse = await fetch("/gap.mp4?sw_ignore=true");
     const initBuffer = await initResponse.arrayBuffer();
@@ -289,9 +286,12 @@ export class Playlist {
     const segmentBuffer = await segmentResponse.arrayBuffer();
     const segmentData = new Uint8Array(segmentBuffer);
 
-    initGapData = initData;
-    segmentGapData = segmentData;
+    this.initGapData = initData;
+    this.segmentGapData = segmentData;
   };
+
+  getGapInit = () => this.initGapData;
+  getGapSegment = () => this.segmentGapData;
 
   prepareNextUsableIndexes = async () => {
     const { initIndex, segmentIndex } =
