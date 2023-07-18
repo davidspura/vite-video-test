@@ -434,7 +434,10 @@ export class Playlist {
         let indexHelper = 0;
 
         if (hadFiles) {
-          files.unshift(this.lastSentInit!);
+          if (!files[0].filename.endsWith(".mp4")) {
+            files.unshift(this.lastSentInit!);
+          }
+
           files.forEach((file) => {
             const { discontinuity, duration, filename, createdAt, index } =
               file;
@@ -451,14 +454,17 @@ export class Playlist {
                 );
               }
               indexHelper = file.index;
-              this.lastSentSegment = file;
+              // this.lastSentSegment = file;
               skipNumber = (index - (oldestSegment?.index || 0)).toString();
               playlist = playlist.replaceAll("SKIPPED_PLACEHOLDER", skipNumber);
               if (discontinuity) {
-                this.discontinuitySequence++;
+                if (index > (this.lastSentSegment?.index || 0)) {
+                  this.discontinuitySequence++;
+                }
                 playlistUpdate = this.createDiscontinuity(createdAt);
               }
               playlistUpdate += this.createSegment(filename, duration!);
+              this.lastSentSegment = file;
             }
 
             playlist = playlist.concat("\n" + playlistUpdate);
