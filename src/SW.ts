@@ -1,5 +1,5 @@
 import DB from "./DB";
-import { Playlist, getGapInit, getGapSegment } from "./final/Recorder";
+import { Playlist } from "./final/Recorder";
 
 export default class SW {
   db: DB | null = null;
@@ -23,7 +23,7 @@ export default class SW {
       if (type === "file-request") {
         // will be done on CAMERA
         const file = await read(filename);
-        console.log("Got file from DB: ", file.filename);
+        // console.log("Got file from DB: ", file.filename);
         const event = new CustomEvent("timeline-update", { detail: file });
         document.dispatchEvent(event);
         this.post(file);
@@ -51,12 +51,12 @@ export default class SW {
       }
 
       if (type === "gap-init") {
-        const data = getGapInit();
+        const data = this.playlist.getGapInit();
         this.post({ data, filename });
       }
 
       if (type === "gap-segment") {
-        const data = getGapSegment();
+        const data = this.playlist.getGapSegment();
         this.post({ data, filename });
       }
     });
