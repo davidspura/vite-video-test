@@ -281,11 +281,11 @@ export class Playlist {
   discontinuitySequence: number = 0;
 
   loadGapFiles = async () => {
-    const initResponse = await fetch("/gap.mp4");
+    const initResponse = await fetch("/gap.mp4?sw_ignore=true");
     const initBuffer = await initResponse.arrayBuffer();
     const initData = new Uint8Array(initBuffer);
 
-    const segmentResponse = await fetch("/gap0.m4s");
+    const segmentResponse = await fetch("/gap0.m4s?sw_ignore=true");
     const segmentBuffer = await segmentResponse.arrayBuffer();
     const segmentData = new Uint8Array(segmentBuffer);
 

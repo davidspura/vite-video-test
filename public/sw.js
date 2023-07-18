@@ -1,5 +1,6 @@
 console.log("Alive");
 
+const IGNORE_TAG = "sw_ignore=true";
 const INITIAL_PLAYLIST = "playlist.m3u8";
 const DELTA_PLAYLIST = "playlist.m3u8?_HLS_skip=YES";
 
@@ -16,8 +17,10 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("fetch", async (event) => {
-  if (hslFilenames.some((f) => event.request.url.includes(f))) {
-    const filename = event.request.url.split("/").pop();
+  const requestUrl = event.request.url;
+  if (requestUrl.includes(IGNORE_TAG)) return;
+  if (hslFilenames.some((f) => requestUrl.includes(f))) {
+    const filename = requestUrl.split("/").pop();
 
     event.respondWith(
       (async () => {
