@@ -29,7 +29,6 @@ function App() {
   }, []);
 
   const startPlayer = () => {
-    // setTimeout(() => {
     // const player =
     //   videojs.getPlayer("playlist_video") || videojs("playlist_video");
     // player.options({
@@ -46,19 +45,21 @@ function App() {
     //     nativeVideoTracks: false,
     //   },
     // });
+
     // videojs.log.level("debug");
     // player.reloadSourceOnError();
     // videojs.log.level("debug");
     const player = videojs("playlist_video", {
       liveui: true,
     });
+
+    if (!player.paused()) return;
+
     player.src({
       src: "/playlist.m3u8",
       type: "application/x-mpegURL",
     });
     player.play();
-    // }, 20000);
-    // }, 1000);
   };
 
   return (
