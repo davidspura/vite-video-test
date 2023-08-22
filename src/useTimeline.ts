@@ -120,9 +120,8 @@ export default function useTimeline() {
       let distance: number;
       if (mouseX.current === null) distance = diff;
       else distance = diff + (e.pageX - mouseX.current);
-      const timelinePosition = distance;
 
-      timeline.current.style.left = `${timelinePosition * -1}px`;
+      timeline.current.style.left = `${distance * -1}px`;
       const isOutOfBounds = getIsOutOfBounds();
 
       if (!isOutOfBounds) {

@@ -1,4 +1,12 @@
-import { Box, Button, chakra, Flex, Spinner, Text } from "@chakra-ui/react";
+import {
+  Box,
+  Button,
+  chakra,
+  Checkbox,
+  Flex,
+  Spinner,
+  Text,
+} from "@chakra-ui/react";
 import { useEffect, useRef, useState } from "react";
 import createMediaRecorder from "./MediaRecorder/RecorderPreview";
 
@@ -16,6 +24,9 @@ function App() {
   const isInitiated = useRef(false);
   const recorder = useRef<Recorder | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  const [playerDisabled, setPlayerDisabled] = useState(false);
+  const [recorderDisabled, setRecorderDisabled] = useState(false);
 
   useEffect(() => {
     if (!isInitiated.current) {
@@ -67,13 +78,21 @@ function App() {
       <Flex align="center" mb="1rem" columnGap="1rem">
         <Button
           onClick={() => {
-            recorder.current?.start();
-            startPlayer();
+            if (!recorderDisabled) recorder.current?.start();
+            if (!playerDisabled) startPlayer();
           }}
         >
           Start Recorder
         </Button>
         <Button onClick={recorder.current?.stop}>Stop</Button>
+      </Flex>
+      <Flex>
+        <Checkbox mr="2rem" onChange={() => setPlayerDisabled(!playerDisabled)}>
+          Disable Player
+        </Checkbox>
+        <Checkbox onChange={() => setRecorderDisabled(!recorderDisabled)}>
+          Disable Recorder
+        </Checkbox>
       </Flex>
       <Text>Preview</Text>
       {!isReady && <Spinner />}
