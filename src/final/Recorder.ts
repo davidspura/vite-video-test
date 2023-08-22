@@ -728,12 +728,12 @@ export class Transcoder {
       "-i",
       "anullsrc",
       "-c:v",
-      "libvpx",
+      "h264",
       "-c:a",
-      "libvorbis",
+      "aac",
       "-t",
       duration.toFixed(2),
-      "black_video.webm",
+      "black_video.mp4",
     ];
 
     console.time("run-method-black-video");
@@ -742,11 +742,9 @@ export class Transcoder {
 
     const optionsForGapVideo = [
       "-i",
-      "black_video.webm",
-      "-c:a",
-      "aac",
-      "-c:v",
-      "h264",
+      "black_video.mp4",
+      "-c",
+      "copy",
       "-hls_list_size",
       "0",
       "-hls_segment_type",
@@ -772,7 +770,7 @@ export class Transcoder {
       segmentData,
     });
 
-    this.ffmpeg.FS("unlink", "black_video.webm");
+    this.ffmpeg.FS("unlink", "black_video.mp4");
     this.ffmpeg.FS("unlink", "gap.mp4");
     this.ffmpeg.FS("unlink", "gap0.m4s");
   };
