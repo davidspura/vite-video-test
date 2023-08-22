@@ -51,12 +51,12 @@ export default class SW {
       }
 
       if (type === "gap-init") {
-        const data = this.playlist.getGapInit();
+        const data = this.playlist.getGapInit(filename);
         this.post({ data, filename });
       }
 
       if (type === "gap-segment") {
-        const data = this.playlist.getGapSegment();
+        const data = this.playlist.getGapSegment(filename);
         this.post({ data, filename });
       }
     });

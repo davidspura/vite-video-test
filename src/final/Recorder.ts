@@ -12,28 +12,8 @@ const SEGMENT_LENGTH = 10000; // 10 seconds split into 2 second segment in Trans
 const SEGMENT_DURATION_REGEX = /#EXTINF:([\d.]+),/g;
 const TRANSCODER_RESET_TIME = 15 * 60000; // 15 minutes
 
-// const TARGETDURATION = 2;
-// const CANSKIP = (TARGETDURATION * 6).toFixed(1);
-
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
-
-// const initPlaylistFallbackString = `#EXTM3U
-// #EXT-X-TARGETDURATION:${TARGETDURATION}
-// #EXT-X-VERSION:9
-// #EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=${CANSKIP}
-// #EXT-X-DISCONTINUITY-SEQUENCE:0
-// #EXT-X-MEDIA-SEQUENCE:0`;
-// const deltaPlaylistFallbackString = `#EXTM3U
-// #EXT-X-TARGETDURATION:${TARGETDURATION}
-// #EXT-X-VERSION:9
-// #EXT-X-SERVER-CONTROL:CAN-SKIP-UNTIL=${CANSKIP}
-// #EXT-X-DISCONTINUITY-SEQUENCE:0
-// #EXT-X-MEDIA-SEQUENCE:0
-// #EXT-X-SKIP:SKIPPED-SEGMENTS=0`;
-
-// const initPlaylistFallback = encoder.encode(initPlaylistFallbackString);
-// const deltaPlaylistFallback = encoder.encode(deltaPlaylistFallbackString);
 
 const Settings = (function () {
   let hasUpdated = false;
@@ -46,7 +26,7 @@ const Settings = (function () {
   let initPlaylistFallback_: Uint8Array;
   let deltaPlaylistFallback_: Uint8Array;
 
-  function generateSettings(targetDuration = 2) {
+  function generateSettings(targetDuration = 7) {
     TARGETDURATION_ = targetDuration;
     CANSKIP_ = getSkip(TARGETDURATION_);
     const initPlaylistFallbackString = `#EXTM3U
@@ -80,6 +60,7 @@ const Settings = (function () {
     hasUpdated = true;
   };
 
+  generateSettings();
   return {
     findAndUpdateLongestDuration,
     get TARGETDURATION() {
@@ -161,7 +142,11 @@ export default class Recorder {
     this.status = "recording";
     const sourceDate = new Date();
     this.sourceDate = sourceDate;
-    await this.dbController.fillSegmentGaps(sourceDate.toISOString());
+    const unevenGapSegment = await this.dbController.fillSegmentGaps(
+      sourceDate.toISOString()
+    );
+    if (unevenGapSegment)
+      await this.transcoder.generateGapSegment(unevenGapSegment);
     await this.playlist.prepareNextUsableIndexes();
     this.createSourceVideo();
   };
@@ -274,8 +259,30 @@ export class Playlist {
   } | null = null;
   discontinuitySequence: number = 0;
 
-  initGapData!: Uint8Array;
-  segmentGapData!: Uint8Array;
+  private initGapData!: Uint8Array;
+  private segmentGapData!: Uint8Array;
+
+  private unevenInitGapIndex: number | null = null;
+  private unevenSegmentGapIndex: number | null = null;
+  private unevenInitGapData: Uint8Array | null = null;
+  private unevenSegmentGapData: Uint8Array | null = null;
+
+  setUnevenGapData = ({
+    initData,
+    segmentData,
+    initIndex,
+    segmentIndex,
+  }: {
+    initData: Uint8Array;
+    segmentData: Uint8Array;
+    initIndex: number;
+    segmentIndex: number;
+  }) => {
+    this.unevenInitGapIndex = initIndex;
+    this.unevenSegmentGapIndex = segmentIndex;
+    this.unevenInitGapData = initData;
+    this.unevenSegmentGapData = segmentData;
+  };
 
   loadGapFiles = async () => {
     const initResponse = await fetch("/gap.mp4?sw_ignore=true");
@@ -290,8 +297,22 @@ export class Playlist {
     this.segmentGapData = segmentData;
   };
 
-  getGapInit = () => this.initGapData;
-  getGapSegment = () => this.segmentGapData;
+  getGapInit = (filename: string) => {
+    const fileIndex = filename.match(/\d+/)?.[0];
+    if (fileIndex && parseInt(fileIndex) === this.unevenInitGapIndex) {
+      console.log("Requested UNEVEN gap data init");
+      return this.unevenInitGapData;
+    }
+    return this.initGapData;
+  };
+  getGapSegment = (filename: string) => {
+    const fileIndex = filename.match(/\d+/)?.[0];
+    if (fileIndex && parseInt(fileIndex) === this.unevenSegmentGapIndex) {
+      console.log("Requested UNEVEN gap data segment");
+      return this.unevenSegmentGapData;
+    }
+    return this.segmentGapData;
+  };
 
   prepareNextUsableIndexes = async () => {
     const { initIndex, segmentIndex } =
@@ -626,7 +647,6 @@ export class Transcoder {
       "aac",
       "-c:v",
       "copy",
-      // "h264",
       "-hls_time",
       "2",
       "-hls_list_size",
@@ -635,8 +655,6 @@ export class Transcoder {
       "omit_endlist",
       "-hls_segment_type",
       "fmp4",
-      // "-force_key_frames",
-      // "expr:gte(t,n_forced*1)",
       "-hls_segment_filename",
       "segment%01d.m4s",
       "-hls_fmp4_init_filename",
@@ -683,6 +701,80 @@ export class Transcoder {
       segmentsData,
       initData,
     };
+  };
+
+  generateGapSegment = async ({
+    duration,
+    initIndex,
+    segmentIndex,
+  }: {
+    duration: number;
+    initIndex: number;
+    segmentIndex: number;
+  }) => {
+    if (!this.ffmpeg) console.error("Ffmpeg not initialized");
+
+    const response = await fetch("/black.jpg");
+    const blackImgData = await response.arrayBuffer();
+    this.ffmpeg.FS("writeFile", "black.jpg", new Uint8Array(blackImgData));
+
+    const optionsForBlackVideo = [
+      "-loop",
+      "1",
+      "-i",
+      "black.jpg",
+      "-f",
+      "lavfi",
+      "-i",
+      "anullsrc",
+      "-c:v",
+      "libvpx",
+      "-c:a",
+      "libvorbis",
+      "-t",
+      duration.toFixed(2),
+      "black_video.webm",
+    ];
+
+    console.time("run-method-black-video");
+    await this.ffmpeg.run(...optionsForBlackVideo);
+    console.timeEnd("run-method-black-video");
+
+    const optionsForGapVideo = [
+      "-i",
+      "black_video.webm",
+      "-c:a",
+      "aac",
+      "-c:v",
+      "h264",
+      "-hls_list_size",
+      "0",
+      "-hls_segment_type",
+      "fmp4",
+      "-hls_segment_filename",
+      "gap%01d.m4s",
+      "-hls_fmp4_init_filename",
+      "gap.mp4",
+      "playlist.m3u8",
+    ];
+
+    console.time("run-method-gap");
+    await this.ffmpeg.run(...optionsForGapVideo);
+    console.timeEnd("run-method-gap");
+
+    const initData = this.ffmpeg.FS("readFile", "gap.mp4");
+    const segmentData = this.ffmpeg.FS("readFile", "gap0.m4s");
+
+    this.playlist.setUnevenGapData({
+      initIndex,
+      segmentIndex,
+      initData,
+      segmentData,
+    });
+
+    this.ffmpeg.FS("unlink", "black_video.webm");
+    this.ffmpeg.FS("unlink", "gap.mp4");
+    this.ffmpeg.FS("unlink", "gap0.m4s");
   };
 }
 
@@ -771,7 +863,26 @@ class DbController {
 
     console.log("gaps: ", gaps);
 
-    for (const gapDuration of gaps) {
+    const unevenGapDuration = gaps[gaps.length - 1];
+    const unevenGapInitIndex = initIndex + 1;
+
+    for (const [index, gapDuration] of gaps.entries()) {
+      const isLast = index === gaps.length - 1;
+
+      if (isLast) {
+        const initPayload: HlsDbItem = {
+          filename: `g${unevenGapInitIndex}.mp4`,
+          index: unevenGapInitIndex,
+          createdAt: new Date(segmentDate).toISOString(),
+          data: new Uint8Array(),
+          discontinuity: false,
+          duration: null,
+          isGap: false,
+          rotation: "horizontal",
+        };
+        await write(initPayload);
+      }
+
       const payload: HlsDbItem = {
         filename: `g${segmentIndex}.m4s`,
         index: segmentIndex,
@@ -790,6 +901,23 @@ class DbController {
       );
       segmentIndex++;
     }
+
+    const unevenGapSegmentIndex = segmentIndex - 1;
+
+    console.log(
+      "unevenGapDuration: ",
+      unevenGapDuration,
+      "unevenGapInitIndex: ",
+      unevenGapInitIndex,
+      "unevenGapSegmentIndex: ",
+      unevenGapSegmentIndex
+    );
+
+    return {
+      duration: unevenGapDuration,
+      initIndex: unevenGapInitIndex,
+      segmentIndex: unevenGapSegmentIndex,
+    };
   };
 
   getSegmentFile = (direction: IDBCursorDirection) => {
