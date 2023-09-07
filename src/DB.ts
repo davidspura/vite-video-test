@@ -6,7 +6,7 @@ export type HlsDbItem = {
   duration: string | null;
   discontinuity: boolean;
   rotation: "horizontal";
-  isGap: boolean;
+  isUneven?: boolean;
 };
 
 const DB_NAME = "hls-database";
