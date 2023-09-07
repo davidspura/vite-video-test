@@ -203,15 +203,15 @@ export default class Recorder {
 
     if (initData) {
       const index = this.playlist.getLatestInitIndex();
-      const initPayload = {
+      const initPayload: HlsDbItem = {
         filename: `i${index}.mp4`,
         data: initData,
         createdAt: this.sourceDate.toISOString(),
-        rotation: "horizontal",
+        rotation: "ROTATION_0",
         duration: null,
         discontinuity: false,
         index,
-      } as const;
+      };
       await this.db.getWrite()(initPayload);
       this.playlist.addToNextInitIndex(1);
     }
@@ -223,15 +223,15 @@ export default class Recorder {
     for (const segment of segmentsData) {
       const { data, duration } = segment;
       const index = segmentStartIndex + i;
-      const segmentPayload = {
+      const segmentPayload: HlsDbItem = {
         filename: `s${index}.m4s`,
         data,
         duration,
         createdAt: this.sourceDate.toISOString(),
-        rotation: "horizontal",
+        rotation: "ROTATION_0",
         discontinuity: i === 0,
         index,
-      } as const;
+      };
       await write(segmentPayload);
       console.log("DONE saving segment ", index);
 
@@ -865,7 +865,7 @@ class DbController {
       data: new Uint8Array(),
       discontinuity: false,
       duration: null,
-      rotation: "horizontal",
+      rotation: "ROTATION_0",
     };
 
     const write = this.db.getWrite();
@@ -889,7 +889,7 @@ class DbController {
           data: new Uint8Array(),
           discontinuity: false,
           duration: null,
-          rotation: "horizontal",
+          rotation: "ROTATION_0",
           isUneven: true,
         };
         await write(initPayload);
@@ -902,7 +902,7 @@ class DbController {
         data: new Uint8Array(),
         discontinuity: true,
         duration: gapDuration.toFixed(6),
-        rotation: "horizontal",
+        rotation: "ROTATION_0",
         isUneven: isLast,
       };
 

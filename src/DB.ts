@@ -1,3 +1,9 @@
+export type ImageRotation =
+  | "ROTATION_0"
+  | "ROTATION_90"
+  | "ROTATION_180"
+  | "ROTATION_270";
+
 export type HlsDbItem = {
   index: number;
   filename: string;
@@ -5,7 +11,7 @@ export type HlsDbItem = {
   createdAt: string;
   duration: string | null;
   discontinuity: boolean;
-  rotation: "horizontal";
+  rotation: ImageRotation;
   isUneven?: boolean;
 };
 
