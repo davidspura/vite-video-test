@@ -107,7 +107,7 @@ export default class Recorder {
     await this.dbController.deleteOlderThan(EIGHT_HOURS_IN_MS);
     await this.playlist.loadGapFiles();
     this.dbController
-      .generateUnevenGapData(this.transcoder)
+      .generateUnevenGapData(this.transcoder, this.playlist.unevenFilesData)
       .then(this.playlist.updateUnevenFiles);
   };
 
@@ -148,7 +148,7 @@ export default class Recorder {
     await this.dbController.fillSegmentGaps(sourceDate.toISOString());
     await this.playlist.prepareNextUsableIndexes();
     this.dbController
-      .generateUnevenGapData(this.transcoder)
+      .generateUnevenGapData(this.transcoder, this.playlist.unevenFilesData)
       .then(this.playlist.updateUnevenFiles);
 
     this.createSourceVideo();
@@ -263,7 +263,7 @@ export class Playlist {
   private initGapData!: Uint8Array;
   private segmentGapData!: Uint8Array;
 
-  private unevenFilesData: { [filename: string]: Uint8Array } = {};
+  unevenFilesData: { [filename: string]: Uint8Array } = {};
 
   updateUnevenFiles = (files: typeof this.unevenFilesData) => {
     this.unevenFilesData = { ...this.unevenFilesData, ...files };
@@ -787,11 +787,16 @@ class DbController {
     });
   };
 
-  generateUnevenGapData = async (transcoder: Transcoder) => {
+  generateUnevenGapData = async (
+    transcoder: Transcoder,
+    existingGapData: { [filename: string]: Uint8Array }
+  ) => {
     const request = this.getCursor("readonly", [null, "next"]);
 
     const promises: (() => Promise<void>)[] = [];
-    const unevenFilesData: { [filename: string]: Uint8Array } = {};
+    const unevenFilesData: { [filename: string]: Uint8Array } = {
+      ...existingGapData,
+    };
     let prevInitFilename = "";
 
     return new Promise<typeof unevenFilesData>((resolve) => {
@@ -814,9 +819,12 @@ class DbController {
                 unevenFilesData[initFilename] = initData;
                 unevenFilesData[filename] = segmentData;
               };
-              promises.push(createFileData);
+
+              if (!unevenFilesData[filename]) {
+                promises.push(createFileData);
+                console.log("Found uneven gap: ", filename);
+              }
             }
-            console.log("Found uneven gap ", filename);
           }
 
           cursor.continue();
