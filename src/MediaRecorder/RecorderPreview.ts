@@ -41,7 +41,7 @@ export default async function createMediaRecorder() {
     const chunkSize = 10;
     for (let i = 0; i < files.length; i += chunkSize) {
       const chunk = files.slice(i, i + chunkSize);
-      download(chunk);
+      download(chunk as unknown as any);
       await new Promise((resolve) => setTimeout(resolve, 1000));
     }
 
