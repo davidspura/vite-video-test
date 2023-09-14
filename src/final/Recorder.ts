@@ -1,5 +1,9 @@
 import { FFmpeg, createFFmpeg } from "@ffmpeg/ffmpeg";
 import DB, { HlsDbItem } from "../DB";
+import Hex, {
+  getAudioSampleDuration,
+  getVideoSampleDuration,
+} from "../lib/Hex";
 
 type PlaylistPayload = {
   data: Uint8Array;
@@ -106,9 +110,6 @@ export default class Recorder {
     await this.transcoder.init();
     await this.dbController.deleteOlderThan(EIGHT_HOURS_IN_MS);
     await this.playlist.loadGapFiles();
-    this.dbController
-      .generateUnevenGapData(this.transcoder, this.playlist.unevenFilesData)
-      .then(this.playlist.updateUnevenFiles);
   };
 
   start = async () => {
@@ -148,10 +149,6 @@ export default class Recorder {
     this.sourceDate = sourceDate;
     await this.dbController.fillSegmentGaps(sourceDate.toISOString());
     await this.playlist.prepareNextUsableIndexes();
-    this.dbController
-      .generateUnevenGapData(this.transcoder, this.playlist.unevenFilesData)
-      .then(this.playlist.updateUnevenFiles);
-
     this.createSourceVideo();
   };
 
@@ -265,19 +262,12 @@ export class Playlist {
   private initGapData!: Uint8Array;
   private segmentGapData!: Uint8Array;
 
-  unevenFilesData: { [filename: string]: Uint8Array } = {};
-
-  updateUnevenFiles = (files: typeof this.unevenFilesData) => {
-    this.unevenFilesData = { ...this.unevenFilesData, ...files };
-    console.log("updated uneven files: ", this.unevenFilesData);
-  };
-
   loadGapFiles = async () => {
-    const initResponse = await fetch("/gap.mp4?sw_ignore=true");
+    const initResponse = await fetch("/gap_7_more_exp.mp4?sw_ignore=true");
     const initBuffer = await initResponse.arrayBuffer();
     const initData = new Uint8Array(initBuffer);
 
-    const segmentResponse = await fetch("/gap0.m4s?sw_ignore=true");
+    const segmentResponse = await fetch("/gap_7_more_exp0.m4s?sw_ignore=true");
     const segmentBuffer = await segmentResponse.arrayBuffer();
     const segmentData = new Uint8Array(segmentBuffer);
 
@@ -285,19 +275,26 @@ export class Playlist {
     this.segmentGapData = segmentData;
   };
 
-  getGapInit = (filename: string) => {
-    if (this.unevenFilesData[filename]) {
-      console.log("Requested UNEVEN gap data init");
-      return this.unevenFilesData[filename];
-    }
+  getAdjustedGapSegmentData = (duration: number) => {
+    const revritableArray = this.segmentGapData.slice(0);
+
+    const hex = Hex.arrayToHex(revritableArray);
+    const newVideoDuration = Hex.numberToHex(getVideoSampleDuration(duration));
+    const newAudioDuration = Hex.numberToHex(getAudioSampleDuration(duration));
+    const updatedHex = Hex.updateHex(hex, newVideoDuration, newAudioDuration);
+
+    const arrayFromHex = Hex.hexToArray(updatedHex);
+    return arrayFromHex;
+  };
+
+  getGapInit = async () => {
     return this.initGapData;
   };
 
-  getGapSegment = (filename: string) => {
-    if (this.unevenFilesData[filename]) {
-      console.log("Requested UNEVEN gap data segment");
-      return this.unevenFilesData[filename];
-    }
+  getGapSegment = async (filename: string) => {
+    const file = await this.dbController.getRead()(filename);
+    if (file.isUneven)
+      return this.getAdjustedGapSegmentData(Number(file.duration!));
     return this.segmentGapData;
   };
 
@@ -758,8 +755,11 @@ export class Transcoder {
 }
 
 class DbController {
+  getRead: DB["getRead"];
+
   constructor(private db: DB) {
     this.db = db;
+    this.getRead = this.db.getRead;
   }
 
   getCursor = (
@@ -793,58 +793,6 @@ class DbController {
         } else resolve(1);
       };
       request.onerror = (e) => console.log("'deleteOlderThan' failed data ", e);
-    });
-  };
-
-  generateUnevenGapData = async (
-    transcoder: Transcoder,
-    existingGapData: { [filename: string]: Uint8Array }
-  ) => {
-    const request = this.getCursor("readonly", [null, "next"]);
-
-    const promises: (() => Promise<void>)[] = [];
-    const unevenFilesData: { [filename: string]: Uint8Array } = {
-      ...existingGapData,
-    };
-    let prevInitFilename = "";
-
-    return new Promise<typeof unevenFilesData>((resolve) => {
-      request.onsuccess = async (e) => {
-        const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
-        if (cursor) {
-          const file = cursor.value as HlsDbItem;
-          const { duration, filename, isUneven } = file;
-          const isGapFile = filename.startsWith("g");
-          const isInit = filename.endsWith(".mp4");
-
-          if (isGapFile && isUneven) {
-            if (isInit) {
-              prevInitFilename = filename;
-            } else if (duration) {
-              const initFilename = prevInitFilename;
-              const createFileData = async () => {
-                const { initData, segmentData } =
-                  await transcoder.generateGapFiles(Number(duration));
-                unevenFilesData[initFilename] = initData;
-                unevenFilesData[filename] = segmentData;
-              };
-
-              if (!unevenFilesData[filename]) {
-                promises.push(createFileData);
-                console.log("Found uneven gap: ", filename);
-              }
-            }
-          }
-
-          cursor.continue();
-        } else {
-          console.log("Finished generating uneven data ", promises);
-          for (const promise of promises) {
-            await promise();
-          }
-          resolve(unevenFilesData);
-        }
-      };
     });
   };
 
@@ -892,7 +840,6 @@ class DbController {
     const segmentDate = startDate;
 
     console.log("gaps: ", gaps);
-
     const unevenGapInitIndex = initIndex + 1;
 
     for (const [index, gapDuration] of gaps.entries()) {
