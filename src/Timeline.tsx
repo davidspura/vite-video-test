@@ -13,12 +13,14 @@ const TestTimeline = ({ canStart }: { canStart: boolean }) => {
     timeline,
     timestamps,
     timelineStartDate,
+    gaps,
   } = useTimeline();
 
   if (!canStart) return null;
+
   return (
     <>
-      <Box overflow="hidden">
+      <Box overflow="hidden" userSelect="none">
         <Video
           ref={video}
           id="playlist_video"
@@ -41,7 +43,9 @@ const TestTimeline = ({ canStart }: { canStart: boolean }) => {
           direction="column"
         >
           {/* <canvas ref={canvasRef} height="200" /> */}
-          <Box ref={timeDisplay}>Time</Box>
+          <Box userSelect="none" ref={timeDisplay}>
+            Time
+          </Box>
           <Box ref={indicator} w="4px" h="60px" bg="blue" pos="relative">
             <Box
               ref={timeline}
@@ -62,6 +66,7 @@ const TestTimeline = ({ canStart }: { canStart: boolean }) => {
                 alignItems="center"
                 transform="translateY(54px)"
                 userSelect="none"
+                pos="relative"
               >
                 {timestamps.map((_, i) => {
                   const timeWithAddedMins = new Date(
@@ -76,6 +81,7 @@ const TestTimeline = ({ canStart }: { canStart: boolean }) => {
                     </Box>
                   );
                 })}
+                {gaps}
               </Flex>
             </Box>
           </Box>

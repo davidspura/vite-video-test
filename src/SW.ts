@@ -31,32 +31,32 @@ export default class SW {
 
       if (type === "initial-playlist-request") {
         // will be done on CAMERA
-        const { data, duration, startDate } =
+        const { data, duration, startDate, gaps } =
           await this.playlist.generatePlaylist();
         const event = new CustomEvent("duration-update", {
-          detail: { duration, startDate },
+          detail: { duration, startDate, gaps },
         });
         document.dispatchEvent(event);
         this.post({ filename, data });
       }
       if (type === "delta-playlist-request") {
         // will be done on CAMERA
-        const { data, duration, startDate } =
+        const { data, duration, startDate, gaps } =
           await this.playlist.generateDeltaPlaylist();
         const event = new CustomEvent("duration-update", {
-          detail: { duration, startDate },
+          detail: { duration, startDate, gaps },
         });
         document.dispatchEvent(event);
         this.post({ filename, data });
       }
 
       if (type === "gap-init") {
-        const data = this.playlist.getGapInit(filename);
+        const data = await this.playlist.getGapInit();
         this.post({ data, filename });
       }
 
       if (type === "gap-segment") {
-        const data = this.playlist.getGapSegment(filename);
+        const data = await this.playlist.getGapSegment(filename);
         this.post({ data, filename });
       }
     });

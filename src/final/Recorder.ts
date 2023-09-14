@@ -120,6 +120,7 @@ export default class Recorder {
     if (this.timeout) clearTimeout(this.timeout);
     this.status = "idle";
     this.mediaRecorder?.stop();
+    GapTimeRanges.reset();
   };
 
   private createSourceVideo = () => {
@@ -257,6 +258,7 @@ export class Playlist {
     data: Uint8Array;
     startDate: string;
     duration: number;
+    gaps: TimeRange[];
   } | null = null;
   discontinuitySequence: number = 0;
 
@@ -320,8 +322,12 @@ export class Playlist {
     startDate = new Date().toISOString(),
     duration = 0,
   }: PlaylistPayload) => {
-    // playableTimeRanges = {start:number, end:number}[]
-    const payload = { data, startDate, duration };
+    const payload = {
+      data,
+      startDate,
+      duration,
+      gaps: GapTimeRanges.timeRanges,
+    };
     this.lastSentDeltaPlaylist = payload;
     return payload;
   };
@@ -346,11 +352,13 @@ export class Playlist {
       data: Uint8Array;
       duration: number;
       startDate: string;
+      gaps: TimeRange[];
     }>((resolve) => {
       request.onsuccess = (e) => {
         const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
         if (cursor) {
           const file = cursor.value as HlsDbItem;
+          GapTimeRanges.addToTimeRange(file);
           const { discontinuity, duration, filename, createdAt, index } = file;
           const isInit = filename.endsWith(".mp4");
 
@@ -434,6 +442,7 @@ export class Playlist {
       data: Uint8Array;
       duration: number;
       startDate: string;
+      gaps: TimeRange[];
     }>((resolve) => {
       const finish = () => {
         const hadFiles = files.length !== 0;
@@ -982,5 +991,38 @@ class DbController {
         };
       }
     );
+  };
+}
+
+type TimeRange = { start: string; end: string };
+class GapTimeRanges {
+  static timeRanges: TimeRange[] = [];
+  private static previousGapFile: HlsDbItem | null = null;
+  private static currentTimeRange: Partial<TimeRange> = {};
+
+  static addToTimeRange = (item: HlsDbItem) => {
+    const isGapFile = item.filename.startsWith("g");
+    const isGapStart =
+      (!this.previousGapFile ||
+        !this.previousGapFile.filename.startsWith("g")) &&
+      isGapFile;
+    const isGapEnd =
+      this.previousGapFile?.filename.startsWith("g") && !isGapFile;
+
+    if (isGapStart) this.currentTimeRange.start = item.createdAt;
+    if (isGapEnd) this.currentTimeRange.end = item.createdAt;
+
+    if (this.currentTimeRange.start && this.currentTimeRange.end) {
+      this.timeRanges.push(this.currentTimeRange as TimeRange);
+      this.currentTimeRange = {};
+    }
+
+    this.previousGapFile = item;
+  };
+
+  static reset = () => {
+    this.timeRanges = [];
+    this.previousGapFile = null;
+    this.currentTimeRange = {};
   };
 }

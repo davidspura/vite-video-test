@@ -5,6 +5,7 @@ import {
   useState,
   MouseEvent as ReactMouseEvent,
 } from "react";
+import { Box } from "@chakra-ui/react";
 import { throttle } from "./lib/utils";
 
 const indicatorWidthInPx = 4;
@@ -21,9 +22,11 @@ export default function useTimeline() {
   const indicator = useRef<HTMLDivElement>(null);
   const timelineStartDate = useRef<string | null>(null);
   const isDragging = useRef(false);
+  const [gaps, setGaps] = useState<JSX.Element[]>([]);
   const mouseX = useRef<null | number>(null);
   const initialMouseX = useRef<null | number>(null);
   const timeDisplay = useRef<HTMLDivElement>(null);
+  const didRenderGaps = useRef(false);
 
   const updateTimelineWidth = useCallback((e: Event) => {
     const { detail } = e as CustomEvent;
@@ -42,12 +45,43 @@ export default function useTimeline() {
     setTimestamps(new Array(numberOfTimestamps).fill(1));
   }, []);
 
+  const renderGaps = useCallback((e: Event) => {
+    const { detail } = e as CustomEvent;
+    const { gaps: timeranges } = detail as {
+      gaps: { start: string; end: string }[];
+    };
+
+    if (timeranges.length !== 0) didRenderGaps.current = true;
+
+    const elements: JSX.Element[] = [];
+    for (const gap of timeranges) {
+      const startTime =
+        new Date(gap.start).getTime() -
+        new Date(timelineStartDate.current!).getTime();
+      const width = new Date(gap.end).getTime() - new Date(gap.start).getTime();
+      const gapEl = (
+        <Box
+          key={gap.start}
+          pos="absolute"
+          left={timeToPx(startTime / 1000) + "px"}
+          w={timeToPx(width / 1000) + "px"}
+          h="40px"
+          bg="red"
+        />
+      );
+      elements.push(gapEl);
+    }
+    console.log("About to render gaps: ", timeranges, elements);
+    setGaps(elements);
+  }, []);
+
   const onDurationUpdate = useCallback(
     (e: Event) => {
       updateTimelineWidth(e);
       addTimestamps();
+      if (!didRenderGaps.current) renderGaps(e);
     },
-    [updateTimelineWidth, addTimestamps]
+    [updateTimelineWidth, addTimestamps, gaps]
   );
 
   useEffect(() => {
@@ -62,8 +96,12 @@ export default function useTimeline() {
     if (isDragging.current) return;
     const time = video.current.currentTime;
     timeline.current.style.left = `-${timeToPx(time)}px`;
-    timeDisplay.current!.innerText =
-      timelineStartDate.current! + video.current!.currentTime * 1000;
+
+    const currentTime = new Date(
+      new Date(timelineStartDate.current!).getTime() +
+        video.current!.currentTime * 1000
+    );
+    timeDisplay.current!.innerText = `${currentTime.getHours()} : ${currentTime.getMinutes()} : ${currentTime.getSeconds()}`;
   };
 
   const onTimelineClick = (e: MouseEvent) => {
@@ -163,5 +201,6 @@ export default function useTimeline() {
     timeline,
     timestamps,
     timelineStartDate,
+    gaps,
   };
 }
