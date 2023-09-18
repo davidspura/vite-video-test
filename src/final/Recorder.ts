@@ -199,10 +199,12 @@ export default class Recorder {
 
     console.timeEnd("transcoding-time");
 
+    let initFilename: string | undefined;
     if (initData) {
       const index = this.playlist.getLatestInitIndex();
+      initFilename = `i${index}.mp4`;
       const initPayload: HlsDbItem = {
-        filename: `i${index}.mp4`,
+        filename: initFilename,
         data: initData,
         createdAt: this.sourceDate.toISOString(),
         rotation: "ROTATION_0",
@@ -229,6 +231,7 @@ export default class Recorder {
         rotation: "ROTATION_0",
         discontinuity: i === 0,
         index,
+        initFilename,
       };
       await write(segmentPayload);
       console.log("DONE saving segment ", index);
@@ -785,9 +788,9 @@ class DbController {
       request.onsuccess = (e) => {
         const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
         if (cursor) {
-          const record = cursor.value as HlsDbItem;
-          console.warn("Deleting ", record.filename);
-          if (record.discontinuity && onDiscontinuityDelete) {
+          const file = cursor.value as HlsDbItem;
+          console.warn("Deleting ", file.filename);
+          if (file.discontinuity && onDiscontinuityDelete) {
             onDiscontinuityDelete();
           }
           cursor.delete();
@@ -825,8 +828,9 @@ class DbController {
       await this.getNextUsableIndexes();
 
     const startDate = new Date(gapStartTime);
+    let initFilename = `g${initIndex}.mp4`;
     const initPayload: HlsDbItem = {
-      filename: `g${initIndex}.mp4`,
+      filename: initFilename,
       index: initIndex,
       createdAt: startDate.toISOString(),
       data: new Uint8Array(),
@@ -848,8 +852,9 @@ class DbController {
       const isLast = index === gaps.length - 1;
 
       if (isLast) {
+        initFilename = `g${unevenGapInitIndex}.mp4`;
         const initPayload: HlsDbItem = {
-          filename: `g${unevenGapInitIndex}.mp4`,
+          filename: initFilename,
           index: unevenGapInitIndex,
           createdAt: new Date(segmentDate).toISOString(),
           data: new Uint8Array(),
@@ -870,6 +875,7 @@ class DbController {
         duration: gapDuration.toFixed(6),
         rotation: "ROTATION_0",
         isUneven: isLast,
+        initFilename,
       };
 
       await write(payload);

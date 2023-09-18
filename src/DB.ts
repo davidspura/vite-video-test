@@ -13,6 +13,7 @@ export type HlsDbItem = {
   discontinuity: boolean;
   rotation: ImageRotation;
   isUneven?: boolean;
+  initFilename?: string;
 };
 
 const DB_NAME = "hls-database";
