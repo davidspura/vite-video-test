@@ -356,6 +356,7 @@ export class Playlist {
         if (cursor) {
           const file = cursor.value as HlsDbItem;
           GapTimeRanges.addToTimeRange(file);
+
           const { discontinuity, duration, filename, createdAt, index } = file;
           const isInit = filename.endsWith(".mp4");
 
@@ -508,6 +509,7 @@ export class Playlist {
         const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
         if (cursor) {
           const file = cursor.value as HlsDbItem;
+          GapTimeRanges.addToTimeRange(file);
 
           const fileDate = new Date(file.createdAt);
           fileDate.setMilliseconds(0);
@@ -943,9 +945,13 @@ class DbController {
 
 type TimeRange = { start: string; end: string };
 class GapTimeRanges {
-  static timeRanges: TimeRange[] = [];
+  static _timeRanges: { [key: string]: TimeRange } = {};
   private static previousGapFile: HlsDbItem | null = null;
   private static currentTimeRange: Partial<TimeRange> = {};
+
+  static get timeRanges() {
+    return Object.values(this._timeRanges);
+  }
 
   static addToTimeRange = (item: HlsDbItem) => {
     const isGapFile = item.filename.startsWith("g");
@@ -960,7 +966,7 @@ class GapTimeRanges {
     if (isGapEnd) this.currentTimeRange.end = item.createdAt;
 
     if (this.currentTimeRange.start && this.currentTimeRange.end) {
-      this.timeRanges.push(this.currentTimeRange as TimeRange);
+      this._timeRanges[item.createdAt] = this.currentTimeRange as TimeRange;
       this.currentTimeRange = {};
     }
 
@@ -968,7 +974,7 @@ class GapTimeRanges {
   };
 
   static reset = () => {
-    this.timeRanges = [];
+    this._timeRanges = {};
     this.previousGapFile = null;
     this.currentTimeRange = {};
   };
