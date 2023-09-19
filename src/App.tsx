@@ -26,7 +26,7 @@ function App() {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const [playerDisabled, setPlayerDisabled] = useState(false);
-  const [recorderDisabled, setRecorderDisabled] = useState(false);
+  const [recorderDisabled, setRecorderDisabled] = useState(true);
 
   useEffect(() => {
     if (!isInitiated.current) {
@@ -59,7 +59,7 @@ function App() {
 
     // videojs.log.level("debug");
     // player.reloadSourceOnError();
-    // videojs.log.level("debug");
+
     const player = videojs("playlist_video", {
       liveui: true,
     });
@@ -87,10 +87,17 @@ function App() {
         <Button onClick={recorder.current?.stop}>Stop</Button>
       </Flex>
       <Flex>
-        <Checkbox mr="2rem" onChange={() => setPlayerDisabled(!playerDisabled)}>
+        <Checkbox
+          mr="2rem"
+          onChange={() => setPlayerDisabled(!playerDisabled)}
+          defaultChecked={playerDisabled}
+        >
           Disable Player
         </Checkbox>
-        <Checkbox onChange={() => setRecorderDisabled(!recorderDisabled)}>
+        <Checkbox
+          onChange={() => setRecorderDisabled(!recorderDisabled)}
+          defaultChecked={recorderDisabled}
+        >
           Disable Recorder
         </Checkbox>
       </Flex>

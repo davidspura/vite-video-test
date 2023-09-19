@@ -1,6 +1,7 @@
 import { FFmpeg, createFFmpeg } from "@ffmpeg/ffmpeg";
 import DB, { HlsDbItem } from "../DB";
 import Hex, {
+  getGapFilename,
   getAudioSampleDuration,
   getVideoSampleDuration,
 } from "../lib/Hex";
@@ -266,11 +267,15 @@ export class Playlist {
   private segmentGapData!: Uint8Array;
 
   loadGapFiles = async () => {
-    const initResponse = await fetch("/gap_7_more_exp.mp4?sw_ignore=true");
+    const initResponse = await fetch("/gapFiles/gap.mp4?sw_ignore=true");
+    // const initResponse = await fetch("/gap_7_more_exp.mp4?sw_ignore=true");
+    // const initResponse = await fetch("/gap_7_no_audio.mp4?sw_ignore=true");
     const initBuffer = await initResponse.arrayBuffer();
     const initData = new Uint8Array(initBuffer);
 
-    const segmentResponse = await fetch("/gap_7_more_exp0.m4s?sw_ignore=true");
+    const segmentResponse = await fetch("/gap0.m4s?sw_ignore=true");
+    // const segmentResponse = await fetch("/gap_7_more_exp0.m4s?sw_ignore=true");
+    // const segmentResponse = await fetch("/gap_7_no_audio0.m4s?sw_ignore=true");
     const segmentBuffer = await segmentResponse.arrayBuffer();
     const segmentData = new Uint8Array(segmentBuffer);
 
@@ -291,13 +296,25 @@ export class Playlist {
   };
 
   getGapInit = async () => {
+    console.log("Getting gap INIT");
     return this.initGapData;
   };
 
   getGapSegment = async (filename: string) => {
     const file = await this.dbController.getRead()(filename);
-    if (file.isUneven)
-      return this.getAdjustedGapSegmentData(Number(file.duration!));
+    if (file.isUneven) {
+      console.log(
+        "About to get uneven Gap file: ",
+        file.filename,
+        file.duration
+      );
+      const filename = getGapFilename(file.duration!);
+      const buffer = await (
+        await fetch(`/gapFiles/${filename}?sw_ignore=true`)
+      ).arrayBuffer();
+      return new Uint8Array(buffer);
+    }
+    //   return this.getAdjustedGapSegmentData(Number(file.duration!));
     return this.segmentGapData;
   };
 
@@ -486,7 +503,7 @@ export class Playlist {
             playlist = playlist.concat("\n" + playlistUpdate);
           });
         }
-        console.log("Created DELTA playlist ", playlist);
+        // console.log("Created DELTA playlist ", playlist);
         const encodedPlaylist = encoder.encode(playlist);
 
         if (!hadFiles) {
@@ -775,6 +792,25 @@ class DbController {
     const request = index.openCursor(...cursorOptions);
     return request;
   };
+
+  // private deleteRemainingFiles = (_initFilenames:string[]) =>{
+  //   const initFilenames = [..._initFilenames]
+  //   const request = this.getCursor("readonly", [null, "next"]);
+  //   return new Promise<void>((resolve) => {
+  //     request.onsuccess = (e) => {
+  //       const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
+  //       if (cursor) {
+  //         const file = cursor.value as HlsDbItem;
+  //         const isForDlete
+
+  //         cursor.continue();
+  //       } else {
+  //         console.log("Read all files");
+  //         resolve()
+  //       }
+  //     };
+  //   });
+  // }
 
   deleteOlderThan = (time: number, onDiscontinuityDelete?: () => void) => {
     const upperBound = new Date(Date.now() - time).toISOString();
