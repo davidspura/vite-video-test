@@ -1,10 +1,6 @@
 import { FFmpeg, createFFmpeg } from "@ffmpeg/ffmpeg";
 import DB, { HlsDbItem } from "../DB";
-import Hex, {
-  getGapFilename,
-  getAudioSampleDuration,
-  getVideoSampleDuration,
-} from "../lib/Hex";
+import { getGapFilename } from "../lib/getGapFilename";
 
 type PlaylistPayload = {
   data: Uint8Array;
@@ -267,15 +263,11 @@ export class Playlist {
   private segmentGapData!: Uint8Array;
 
   loadGapFiles = async () => {
-    const initResponse = await fetch("/gapFiles/gap.mp4?sw_ignore=true");
-    // const initResponse = await fetch("/gap_7_more_exp.mp4?sw_ignore=true");
-    // const initResponse = await fetch("/gap_7_no_audio.mp4?sw_ignore=true");
+    const initResponse = await fetch("/final_gap.mp4?sw_ignore=true");
     const initBuffer = await initResponse.arrayBuffer();
     const initData = new Uint8Array(initBuffer);
 
     const segmentResponse = await fetch("/gap0.m4s?sw_ignore=true");
-    // const segmentResponse = await fetch("/gap_7_more_exp0.m4s?sw_ignore=true");
-    // const segmentResponse = await fetch("/gap_7_no_audio0.m4s?sw_ignore=true");
     const segmentBuffer = await segmentResponse.arrayBuffer();
     const segmentData = new Uint8Array(segmentBuffer);
 
@@ -283,38 +275,19 @@ export class Playlist {
     this.segmentGapData = segmentData;
   };
 
-  getAdjustedGapSegmentData = (duration: number) => {
-    const revritableArray = this.segmentGapData.slice(0);
-
-    const hex = Hex.arrayToHex(revritableArray);
-    const newVideoDuration = Hex.numberToHex(getVideoSampleDuration(duration));
-    const newAudioDuration = Hex.numberToHex(getAudioSampleDuration(duration));
-    const updatedHex = Hex.updateHex(hex, newVideoDuration, newAudioDuration);
-
-    const arrayFromHex = Hex.hexToArray(updatedHex);
-    return arrayFromHex;
-  };
-
   getGapInit = async () => {
-    console.log("Getting gap INIT");
     return this.initGapData;
   };
 
   getGapSegment = async (filename: string) => {
     const file = await this.dbController.getRead()(filename);
     if (file.isUneven) {
-      console.log(
-        "About to get uneven Gap file: ",
-        file.filename,
-        file.duration
-      );
       const filename = getGapFilename(file.duration!);
       const buffer = await (
         await fetch(`/gapFiles/${filename}?sw_ignore=true`)
       ).arrayBuffer();
       return new Uint8Array(buffer);
     }
-    //   return this.getAdjustedGapSegmentData(Number(file.duration!));
     return this.segmentGapData;
   };
 
@@ -689,7 +662,6 @@ export class Transcoder {
     const segmentDurations = this.playlist.getDurationsForSegmentsFromPlaylist(
       decoder.decode(playlistData)
     );
-    // Settings.findAndUpdateLongestDuration(segmentDurations);
 
     const segmentsData = segmentFilenames.map((filename, index) => {
       const data = this.ffmpeg.FS("readFile", filename);
@@ -715,65 +687,6 @@ export class Transcoder {
       initData,
     };
   };
-
-  generateGapFiles = async (duration: number) => {
-    if (!this.ffmpeg) console.error("Ffmpeg not initialized");
-
-    const response = await fetch("/black.jpg");
-    const blackImgData = await response.arrayBuffer();
-    this.ffmpeg.FS("writeFile", "black.jpg", new Uint8Array(blackImgData));
-
-    const optionsForBlackVideo = [
-      "-loop",
-      "1",
-      "-i",
-      "black.jpg",
-      "-f",
-      "lavfi",
-      "-i",
-      "anullsrc",
-      "-c:v",
-      "h264",
-      "-c:a",
-      "aac",
-      "-t",
-      duration.toFixed(2),
-      "black_video.mp4",
-    ];
-
-    console.time("run-method-black-video");
-    await this.ffmpeg.run(...optionsForBlackVideo);
-    console.timeEnd("run-method-black-video");
-
-    const optionsForGapVideo = [
-      "-i",
-      "black_video.mp4",
-      "-c",
-      "copy",
-      "-hls_list_size",
-      "0",
-      "-hls_segment_type",
-      "fmp4",
-      "-hls_segment_filename",
-      "gap%01d.m4s",
-      "-hls_fmp4_init_filename",
-      "gap.mp4",
-      "playlist.m3u8",
-    ];
-
-    console.time("run-method-gap");
-    await this.ffmpeg.run(...optionsForGapVideo);
-    console.timeEnd("run-method-gap");
-
-    const initData = this.ffmpeg.FS("readFile", "gap.mp4");
-    const segmentData = this.ffmpeg.FS("readFile", "gap0.m4s");
-
-    this.ffmpeg.FS("unlink", "black_video.mp4");
-    this.ffmpeg.FS("unlink", "gap.mp4");
-    this.ffmpeg.FS("unlink", "gap0.m4s");
-
-    return { initData, segmentData };
-  };
 }
 
 class DbController {
@@ -793,24 +706,13 @@ class DbController {
     return request;
   };
 
-  // private deleteRemainingFiles = (_initFilenames:string[]) =>{
-  //   const initFilenames = [..._initFilenames]
-  //   const request = this.getCursor("readonly", [null, "next"]);
-  //   return new Promise<void>((resolve) => {
-  //     request.onsuccess = (e) => {
-  //       const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
-  //       if (cursor) {
-  //         const file = cursor.value as HlsDbItem;
-  //         const isForDlete
+  private deleteRemainingFiles = async (initFilenames: string[]) => {
+    const remove = this.db.getDelete();
 
-  //         cursor.continue();
-  //       } else {
-  //         console.log("Read all files");
-  //         resolve()
-  //       }
-  //     };
-  //   });
-  // }
+    initFilenames.forEach((filename) => {
+      remove(filename);
+    });
+  };
 
   deleteOlderThan = (time: number, onDiscontinuityDelete?: () => void) => {
     const upperBound = new Date(Date.now() - time).toISOString();
@@ -821,17 +723,33 @@ class DbController {
     const request = index.openCursor(range);
 
     return new Promise((resolve) => {
+      const initFilenamesToDelete: string[] = [];
+
+      const finish = async () => {
+        initFilenamesToDelete.pop();
+        await this.deleteRemainingFiles(initFilenamesToDelete);
+        resolve(1);
+      };
+
       request.onsuccess = (e) => {
         const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
         if (cursor) {
           const file = cursor.value as HlsDbItem;
-          console.warn("Deleting ", file.filename);
-          if (file.discontinuity && onDiscontinuityDelete) {
-            onDiscontinuityDelete();
+          const isInit = file.filename.endsWith(".mp4");
+
+          if (isInit) {
+            console.log("found init, not deleting with others");
+            initFilenamesToDelete.push(file.filename);
+            cursor.continue();
+          } else {
+            console.warn("Deleting ", file.filename);
+            if (file.discontinuity && onDiscontinuityDelete) {
+              onDiscontinuityDelete();
+            }
+            cursor.delete();
+            cursor.continue();
           }
-          cursor.delete();
-          cursor.continue();
-        } else resolve(1);
+        } else finish();
       };
       request.onerror = (e) => console.log("'deleteOlderThan' failed data ", e);
     });
