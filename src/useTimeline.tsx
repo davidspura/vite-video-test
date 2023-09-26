@@ -42,7 +42,12 @@ export default function useTimeline() {
       Math.floor(
         timeline.current.getBoundingClientRect().width / FIVE_MINUTE_IN_PX
       ) + 1;
-    setTimestamps(new Array(numberOfTimestamps).fill(1));
+    const timestamps = new Array(numberOfTimestamps).fill(1) as number[];
+
+    const event = new CustomEvent("timestamps-update", {
+      detail: { startDate: timelineStartDate.current, timestamps },
+    });
+    document.dispatchEvent(event);
   }, []);
 
   const renderGaps = useCallback((e: Event) => {

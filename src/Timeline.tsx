@@ -1,9 +1,10 @@
 import { Box, Flex, chakra } from "@chakra-ui/react";
 import useTimeline from "./useTimeline";
+import { useEffect, useState } from "react";
 
 const Video = chakra("video");
 
-const TestTimeline = ({ canStart }: { canStart: boolean }) => {
+export default function TestTimeline({ canStart }: { canStart: boolean }) {
   const {
     onTimeUpdate,
     startDrag,
@@ -11,13 +12,15 @@ const TestTimeline = ({ canStart }: { canStart: boolean }) => {
     timeDisplay,
     indicator,
     timeline,
-    timestamps,
+    // timestamps,
     timelineStartDate,
-    gaps,
+    metadataContainerRef,
+    // gaps,
   } = useTimeline();
 
   if (!canStart) return null;
 
+  console.log("RERENDER");
   return (
     <>
       <Box overflow="hidden" userSelect="none">
@@ -67,21 +70,23 @@ const TestTimeline = ({ canStart }: { canStart: boolean }) => {
                 transform="translateY(54px)"
                 userSelect="none"
                 pos="relative"
+                ref={metadataContainerRef}
               >
-                {timestamps.map((_, i) => {
-                  const timeWithAddedMins = new Date(
+                <TimeStamps />
+                {/* {timestamps.map((_, i) => {
+                  const time = new Date(
                     new Date(timelineStartDate.current!).getTime() +
                       5 * i * 60000
                   );
                   return (
                     <Box key={i} minW="240px">
                       <Box display="inline-flex" transform="translateX(-50%)">
-                        {timeWithAddedMins.toDateString()}
+                        {time.toDateString()}
                       </Box>
                     </Box>
                   );
-                })}
-                {gaps}
+                })} */}
+                {/* {gaps} */}
               </Flex>
             </Box>
           </Box>
@@ -89,6 +94,39 @@ const TestTimeline = ({ canStart }: { canStart: boolean }) => {
       </Box>
     </>
   );
-};
+}
 
-export default TestTimeline;
+function TimeStamps() {
+  const [timestamps, setTimestamps] = useState<number[]>([]);
+  const [startDate, setStartDate] = useState<string | null>(null);
+
+  useEffect(() => {
+    function onUpdate(e: Event) {
+      const { detail } = e as CustomEvent<{
+        startDate: string;
+        timestamps: number[];
+      }>;
+      const { startDate, timestamps } = detail;
+      setStartDate(startDate);
+      setTimestamps(timestamps);
+    }
+
+    document.addEventListener("timestamps-update", onUpdate);
+    return () => {
+      document.removeEventListener("timestamps-update", onUpdate);
+    };
+  }, []);
+
+  if (!startDate) return null;
+
+  return timestamps.map((_, i) => {
+    const time = new Date(new Date(startDate).getTime() + 5 * i * 60000);
+    return (
+      <Box key={i} minW="240px" zIndex={2}>
+        <Box display="inline-flex" transform="translateX(-50%)">
+          {time.toLocaleTimeString()}
+        </Box>
+      </Box>
+    );
+  });
+}
