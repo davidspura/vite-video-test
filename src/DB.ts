@@ -88,19 +88,28 @@ export default class DB {
   };
 
   getDelete = () => {
-    const indexObjectStore = this.createTransaction("readwrite");
-    const { objectStore } = indexObjectStore.index(FILENAME_INDEX);
+    const objectStore = this.createTransaction("readwrite");
     return (filename: string) =>
       new Promise((resolve, reject) => {
-        const request = objectStore.delete(filename);
+        const index = objectStore.index(FILENAME_INDEX);
+        const singleKeyRange = IDBKeyRange.only(filename);
+
+        const request = index.openCursor(singleKeyRange);
+
         request.onsuccess = (e) => {
-          // console.log("DB 'delete' OK");
-          resolve(e);
+          const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
+          if (cursor) {
+            const request = cursor.delete();
+            request.onsuccess = () => {
+              resolve(e);
+            };
+            request.onerror = (e) => {
+              reject();
+            };
+          }
         };
-        request.onerror = (e) => {
-          // console.log("DB 'delete' failed");
-          reject();
-        };
+
+        request.onerror = () => console.log("DB 'delete' failed");
       });
   };
 
