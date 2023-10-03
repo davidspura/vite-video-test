@@ -8,6 +8,12 @@ type PlaylistPayload = {
   duration?: number;
 };
 
+let VALUE_CHECK: any;
+function CHECK_FOR_VALUE(value: any) {
+  if (value === VALUE_CHECK) console.log("=== READ VALUE ", value, " ===");
+}
+
+// const EIGHT_HOURS_IN_MS = 600000;
 const EIGHT_HOURS_IN_MS = 8 * 60 * 60 * 1000;
 const SEGMENT_LENGTH = 10000; // 10 seconds split into 2 second segment in Transcoder
 const SEGMENT_DURATION_REGEX = /#EXTINF:([\d.]+),/g;
@@ -348,7 +354,6 @@ export class Playlist {
         const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
         if (cursor) {
           const file = cursor.value as HlsDbItem;
-          GapTimeRanges.addToTimeRange(file);
 
           const { discontinuity, duration, filename, createdAt, index } = file;
           const isInit = filename.endsWith(".mp4");
@@ -359,6 +364,7 @@ export class Playlist {
             playlistUpdate = this.createInit(filename, createdAt);
             this.lastSentInit = file;
           } else {
+            GapTimeRanges.addToTimeRange(file);
             this.lastSentSegment = file;
             if (!oldestSegment) oldestSegment = file;
 
@@ -380,9 +386,8 @@ export class Playlist {
           playlist = playlist.concat("\n" + playlistUpdate);
           cursor.continue();
         } else {
-          console.log("Read all files");
-          console.log("Created playlist ", playlist);
-
+          GapTimeRanges.closeOpennedGaps();
+          console.log("Created initial playlist");
           const encodedPlaylist = encoder.encode(playlist);
 
           const hadSegments = Boolean(oldestSegment);
@@ -437,9 +442,11 @@ export class Playlist {
     }>((resolve) => {
       const finish = () => {
         const hadFiles = files.length !== 0;
-        let indexHelper = 0;
 
         if (hadFiles) {
+          GapTimeRanges.payload.finish();
+          GapTimeRanges.closeOpennedGaps();
+
           if (!files[0].filename.endsWith(".mp4")) {
             files.unshift(this.lastSentInit!);
           }
@@ -454,13 +461,6 @@ export class Playlist {
               this.lastSentInit = file;
               playlistUpdate = this.createInit(filename, createdAt);
             } else {
-              if (file.index < indexHelper) {
-                console.error(
-                  `WRONG ORDER current is ${file.index} and prev is ${indexHelper}}`
-                );
-              }
-              indexHelper = file.index;
-              // this.lastSentSegment = file;
               skipNumber = (index - (oldestSegment?.index || 0)).toString();
               playlist = playlist.replaceAll("SKIPPED_PLACEHOLDER", skipNumber);
               if (discontinuity) {
@@ -476,7 +476,7 @@ export class Playlist {
             playlist = playlist.concat("\n" + playlistUpdate);
           });
         }
-        // console.log("Created DELTA playlist ", playlist);
+        console.log("Created DELTA playlist");
         const encodedPlaylist = encoder.encode(playlist);
 
         if (!hadFiles) {
@@ -502,12 +502,16 @@ export class Playlist {
         const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
         if (cursor) {
           const file = cursor.value as HlsDbItem;
-          GapTimeRanges.addToTimeRange(file);
-
           const fileDate = new Date(file.createdAt);
           fileDate.setMilliseconds(0);
 
           const isNewSegment = fileDate.getTime() > stopDate.getTime();
+          const isCandidateForTimeRange =
+            file.filename.endsWith(".m4s") &&
+            fileDate.getTime() >
+              new Date(this.lastSentSegment?.createdAt || new Date()).getTime();
+
+          if (isCandidateForTimeRange) GapTimeRanges.payload.add(file, false);
 
           if (!isNewSegment) {
             finish();
@@ -709,6 +713,7 @@ class DbController {
   private deleteRemainingFiles = async (initFilenames: string[]) => {
     const remove = this.db.getDelete();
 
+    console.log("About to delete remaining files: ", initFilenames);
     initFilenames.forEach((filename) => {
       remove(filename);
     });
@@ -726,8 +731,11 @@ class DbController {
       const initFilenamesToDelete: string[] = [];
 
       const finish = async () => {
-        initFilenamesToDelete.pop();
-        await this.deleteRemainingFiles(initFilenamesToDelete);
+        const hasSegments = await this.getSegmentFile("prev");
+        if (hasSegments) initFilenamesToDelete.pop();
+
+        if (initFilenamesToDelete.length !== 0)
+          await this.deleteRemainingFiles(initFilenamesToDelete);
         resolve(1);
       };
 
@@ -742,6 +750,7 @@ class DbController {
             initFilenamesToDelete.push(file.filename);
             cursor.continue();
           } else {
+            GapTimeRanges.removeFromTimeRange(file);
             console.warn("Deleting ", file.filename);
             if (file.discontinuity && onDiscontinuityDelete) {
               onDiscontinuityDelete();
@@ -831,7 +840,10 @@ class DbController {
         isUneven: isLast,
         initFilename,
       };
-
+      if (isLast) {
+        console.log("Start of gap: ", initPayload.createdAt);
+        console.log("End of gap: ", payload.createdAt);
+      }
       await write(payload);
 
       segmentDate.setMilliseconds(
@@ -839,6 +851,8 @@ class DbController {
       );
       segmentIndex++;
     }
+
+    GapTimeRanges.endDate = segmentDate;
   };
 
   getSegmentFile = (direction: IDBCursorDirection) => {
@@ -903,39 +917,139 @@ class DbController {
   };
 }
 
-type TimeRange = { start: string; end: string };
+type TimeRange = { start: string; end: string; id: number };
 class GapTimeRanges {
+  private static index = 0;
   static _timeRanges: { [key: string]: TimeRange } = {};
-  private static previousGapFile: HlsDbItem | null = null;
+  private static previousFile: HlsDbItem | null = null;
   private static currentTimeRange: Partial<TimeRange> = {};
+  static endDate: Date | undefined;
 
   static get timeRanges() {
     return Object.values(this._timeRanges);
   }
 
-  static addToTimeRange = (item: HlsDbItem) => {
+  private static _addToTimeRange = (
+    item: HlsDbItem,
+    { log } = { log: false }
+  ) => {
     const isGapFile = item.filename.startsWith("g");
     const isGapStart =
-      (!this.previousGapFile ||
-        !this.previousGapFile.filename.startsWith("g")) &&
+      (!this.previousFile || !this.previousFile.filename.startsWith("g")) &&
       isGapFile;
-    const isGapEnd =
-      this.previousGapFile?.filename.startsWith("g") && !isGapFile;
+    const isGapEnd = this.previousFile?.filename.startsWith("g") && !isGapFile;
 
-    if (isGapStart) this.currentTimeRange.start = item.createdAt;
-    if (isGapEnd) this.currentTimeRange.end = item.createdAt;
-
-    if (this.currentTimeRange.start && this.currentTimeRange.end) {
-      this._timeRanges[item.createdAt] = this.currentTimeRange as TimeRange;
-      this.currentTimeRange = {};
+    if (isGapStart) {
+      if (log)
+        console.log(
+          "found gap start: ",
+          item.createdAt,
+          new Date(item.createdAt).toLocaleTimeString()
+        );
+      this.currentTimeRange.start = item.createdAt;
+    }
+    if (isGapEnd) {
+      if (log)
+        console.log(
+          "found gap end: ",
+          item.createdAt,
+          new Date(item.createdAt).toLocaleTimeString()
+        );
+      this.currentTimeRange.end = item.createdAt;
     }
 
-    this.previousGapFile = item;
+    if (this.currentTimeRange.start && this.currentTimeRange.end) {
+      if (log)
+        console.log("ADDING new gap to timerange: ", this.currentTimeRange);
+
+      this.currentTimeRange.id = this.index;
+      this._timeRanges[item.createdAt] = this.currentTimeRange as TimeRange;
+      this.currentTimeRange = {};
+      this.index++;
+    }
+
+    this.previousFile = item;
+  };
+
+  static payload = {
+    payloadData: [] as HlsDbItem[],
+    add(item: HlsDbItem, addToEnd = true) {
+      if (addToEnd) this.payloadData.push(item);
+      else this.payloadData.unshift(item);
+    },
+    finish() {
+      GapTimeRanges.addToTimeRange(this.payloadData);
+      this.payloadData = [];
+    },
+  };
+
+  static addToTimeRange = (
+    item: HlsDbItem | HlsDbItem[],
+    { log } = { log: false }
+  ) => {
+    if (Array.isArray(item)) {
+      item.forEach((i) => {
+        this._addToTimeRange(i, { log });
+      });
+    } else {
+      this._addToTimeRange(item, { log });
+    }
+  };
+
+  static closeOpennedGaps = () => {
+    if (
+      this.currentTimeRange.start &&
+      !this.currentTimeRange.end &&
+      this.previousFile
+    ) {
+      this.currentTimeRange.id = this.index;
+      this.index++;
+
+      this.currentTimeRange.end =
+        this.endDate?.toISOString() || new Date().toISOString();
+      console.log(
+        "Closing openned Timerange ",
+        this.currentTimeRange.end,
+        new Date(this.currentTimeRange.end).toLocaleTimeString()
+      );
+
+      this._timeRanges[this.previousFile.createdAt] = this
+        .currentTimeRange as TimeRange;
+      this.currentTimeRange = {};
+    }
+  };
+  static removeFromTimeRange = (removedItem: HlsDbItem) => {
+    if (!removedItem.duration) return;
+    const oldStartDate = new Date(removedItem.createdAt);
+    const duration = Math.round(parseFloat(removedItem.duration) * 1000);
+
+    this.timeRanges.forEach((timerange, i) => {
+      const timerangeStartTime = new Date(timerange.start).getTime();
+      const timerangeEndTime = new Date(timerange.end).getTime();
+      const isOutOfRange = oldStartDate.getTime() >= timerangeStartTime;
+      const newStartTime = timerangeStartTime + duration;
+      const newDuration = timerangeEndTime - newStartTime;
+      const isDeleted = newDuration <= 0;
+
+      if (isOutOfRange) {
+        if (isDeleted) {
+          console.log("removing gap from timerange");
+          delete this._timeRanges[timerange.end];
+        } else {
+          console.log("Adjusting start of gap", timerange);
+          this._timeRanges[timerange.end] = {
+            start: new Date(newStartTime).toISOString(),
+            end: timerange.end,
+            id: timerange.id,
+          };
+        }
+      }
+    });
   };
 
   static reset = () => {
     this._timeRanges = {};
-    this.previousGapFile = null;
+    this.previousFile = null;
     this.currentTimeRange = {};
   };
 }
