@@ -1,7 +1,7 @@
 const { exec } = require("child_process");
 
 const imgCommand =
-  "ffmpeg -f lavfi -i color=c=black:s=16x9 -frames:v 1 black.jpg -y";
+  "ffmpeg -f lavfi -i color=c=black:s=96x54 -frames:v 1 black.jpg -y";
 
 exec(imgCommand, (error, stdout, stderr) => {
   if (error) {
@@ -12,8 +12,11 @@ exec(imgCommand, (error, stdout, stderr) => {
   console.error(`stderr: ${stderr}`);
 });
 
-let duration = 0.033; // start duration in seconds
-const step = 0.033; // step duration in seconds
+// let duration = 0.033; // start duration in seconds
+// const step = 0.033; // step duration in seconds
+
+let duration = 0.02133333; // start duration in seconds
+const step = 0.02133333; // step duration in seconds
 const end = 7; // end duration in seconds
 
 function createMp4Base() {
@@ -41,7 +44,6 @@ function createMp4Base() {
   });
 }
 
-// createMp4Base();
 console.log("Started");
 
 function createM4s() {
@@ -69,4 +71,5 @@ function createM4s() {
   });
 }
 
+// createMp4Base();
 createM4s();
