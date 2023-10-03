@@ -96,10 +96,42 @@ export default function useTimeline() {
     };
   }, []);
 
+  const getTimelineOffsetTime = () => {
+    if (
+      !timelineStartDate.current ||
+      !originalTimelineStartDate.current ||
+      !video.current
+    )
+      return 0;
+    const originalTime = video.current.currentTime;
+
+    const offset =
+      (new Date(timelineStartDate.current).getTime() -
+        new Date(originalTimelineStartDate.current).getTime()) /
+      1000;
+
+    const timeWithOffset = originalTime - offset;
+    if (timeWithOffset < 0) return 0;
+    // if (timeWithOffset < 0) return originalTime;
+
+    const adjustedTime = Math.min(timeWithOffset, originalTime);
+    return adjustedTime;
+  };
+
+  const getTimelineStartDateOffset = () => {
+    return (new Date(timelineStartDate.current!).getTime() / 1000) % 60;
+  };
+
   const onTimeUpdate = () => {
     if (!video.current || !indicator.current || !timeline.current) return;
     if (isDragging.current) return;
-    const time = video.current.currentTime;
+
+    const time = getTimelineOffsetTime();
+    const timelineStartDateOffset = getTimelineStartDateOffset();
+
+    timeline.current.style.backgroundPositionX = `-${timeToPx(
+      timelineStartDateOffset
+    )}px`;
     timeline.current.style.left = `-${timeToPx(time)}px`;
 
     const currentTime = new Date(
@@ -110,10 +142,10 @@ export default function useTimeline() {
   };
 
   const onTimelineClick = (e: MouseEvent) => {
-    if (!timeline.current || !video.current) return;
-    const rect = timeline.current.getBoundingClientRect();
-    const mouseX = pxToTime(e.clientX + 1) - pxToTime(rect.left);
-    video.current.currentTime = mouseX;
+    const seekDistance =
+      e.pageX - indicator.current!.getBoundingClientRect().left;
+    const currentTime = pxToTime(seekDistance);
+    addToCurrentTime(currentTime);
   };
 
   const onMouseMove = (e: MouseEvent) => {
@@ -141,12 +173,9 @@ export default function useTimeline() {
     return isOutOfBounds;
   };
 
-  const addToCurrentTime =
-    //  throttle(
-    (t: number) => {
-      video.current!.currentTime = video.current!.currentTime + t;
-    };
-  // , 500);
+  const addToCurrentTime = (t: number) => {
+    video.current!.currentTime = video.current!.currentTime + t;
+  };
 
   const startDrag = (e: ReactMouseEvent) => {
     video.current?.pause();
