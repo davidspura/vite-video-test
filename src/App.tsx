@@ -26,7 +26,7 @@ function App() {
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const [playerDisabled, setPlayerDisabled] = useState(false);
-  const [recorderDisabled, setRecorderDisabled] = useState(true);
+  const [recorderDisabled, setRecorderDisabled] = useState(false);
 
   useEffect(() => {
     if (!isInitiated.current) {

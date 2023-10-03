@@ -23,7 +23,16 @@ export default function TestTimeline({ canStart }: { canStart: boolean }) {
   console.log("RERENDER");
   return (
     <>
-      <Box overflow="hidden" userSelect="none">
+      <Box
+        overflow="hidden"
+        userSelect="none"
+        sx={{
+          ".playlist_video-dimensions": {
+            width: "640px",
+            height: "480px",
+          },
+        }}
+      >
         <Video
           ref={video}
           id="playlist_video"
