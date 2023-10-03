@@ -6,7 +6,16 @@ import {
   MouseEvent as ReactMouseEvent,
 } from "react";
 import { Box } from "@chakra-ui/react";
-import { throttle } from "./lib/utils";
+import { hashCode, throttle } from "./lib/utils";
+import { nanoid } from "nanoid";
+
+type TimeRange = { start: string; end: string; id: number };
+type EventData = {
+  duration: number;
+  startDate: string;
+  gaps: TimeRange[];
+};
+type TimelineEvent = CustomEvent<EventData>;
 
 const indicatorWidthInPx = 4;
 const pxBetweenSeconds = 0.8;
@@ -16,22 +25,24 @@ const timeToPx = (time: number) => time * pxBetweenSeconds;
 const pxToTime = (px: number) => px * 1.25;
 
 export default function useTimeline() {
-  const [timestamps, setTimestamps] = useState<number[]>([]);
   const video = useRef<HTMLVideoElement>(null);
   const timeline = useRef<HTMLDivElement>(null);
   const indicator = useRef<HTMLDivElement>(null);
   const timelineStartDate = useRef<string | null>(null);
   const isDragging = useRef(false);
-  const [gaps, setGaps] = useState<JSX.Element[]>([]);
   const mouseX = useRef<null | number>(null);
   const initialMouseX = useRef<null | number>(null);
   const timeDisplay = useRef<HTMLDivElement>(null);
-  const didRenderGaps = useRef(false);
+  const metadataContainerRef = useRef<HTMLDivElement>(null);
+  const originalTimelineStartDate = useRef<string | null>(null);
 
   const updateTimelineWidth = useCallback((e: Event) => {
-    const { detail } = e as CustomEvent;
+    const { detail } = e as TimelineEvent;
     const { duration, startDate } = detail;
     timelineStartDate.current = startDate;
+    if (!originalTimelineStartDate.current)
+      originalTimelineStartDate.current = startDate;
+
     const width = timeToPx(duration / 1000);
     if (timeline.current) timeline.current.style.width = `${width}px`;
   }, []);
@@ -50,43 +61,69 @@ export default function useTimeline() {
     document.dispatchEvent(event);
   }, []);
 
+  const gapMap = useRef(new Map<string, TimeRange & { elementId: string }>());
+
   const renderGaps = useCallback((e: Event) => {
-    const { detail } = e as CustomEvent;
-    const { gaps: timeranges } = detail as {
-      gaps: { start: string; end: string }[];
+    if (!metadataContainerRef.current || !timelineStartDate.current) return;
+    const { detail } = e as TimelineEvent;
+    const { gaps: timeranges } = detail;
+
+    const map = gapMap.current;
+
+    const render = (range: TimeRange & { elementId: string }) => {
+      const gapEl = document.createElement("div");
+
+      gapEl.id = range.elementId;
+      gapEl.style.height = "40px";
+      gapEl.style.background = "red";
+      gapEl.style.position = "absolute";
+      gapEl.innerHTML = String(range.id);
+      const startTime =
+        new Date(range.start).getTime() -
+        new Date(timelineStartDate.current!).getTime();
+      const width =
+        new Date(range.end).getTime() - new Date(range.start).getTime();
+
+      gapEl.style.left = timeToPx(startTime / 1000) + "px";
+      gapEl.style.width = timeToPx(width / 1000) + "px";
+
+      metadataContainerRef.current?.append(gapEl);
+    };
+    const remove = (elementId: string) => {
+      document.querySelector(`#${elementId}`)?.remove();
     };
 
-    if (timeranges.length !== 0) didRenderGaps.current = true;
+    timeranges.forEach((timerange) => {
+      const startDate = new Date(timerange.start);
+      const endDate = new Date(timerange.end);
+      const id = "id" + hashCode(startDate.toString() + endDate.toString());
 
-    const elements: JSX.Element[] = [];
-    for (const gap of timeranges) {
-      const startTime =
-        new Date(gap.start).getTime() -
-        new Date(timelineStartDate.current!).getTime();
-      const width = new Date(gap.end).getTime() - new Date(gap.start).getTime();
-      const gapEl = (
-        <Box
-          key={gap.start}
-          pos="absolute"
-          left={timeToPx(startTime / 1000) + "px"}
-          w={timeToPx(width / 1000) + "px"}
-          h="40px"
-          bg="red"
-        />
-      );
-      elements.push(gapEl);
+      const key = JSON.stringify(timerange);
+      if (!map.has(key)) {
+        console.log("Got new timerange, about to render & add to map");
+        const range = { ...timerange, elementId: id };
+        map.set(key, range);
+        render(range);
+      }
+    });
+    for (let key of map.keys()) {
+      if (!timeranges.some((timerange) => JSON.stringify(timerange) === key)) {
+        console.log("Found old timerange, about to remove from map and DOM");
+        const range = map.get(key);
+        if (range) remove(range.elementId);
+        map.delete(key);
+      }
     }
-    console.log("About to render gaps: ", timeranges, elements);
-    setGaps(elements);
   }, []);
 
   const onDurationUpdate = useCallback(
     (e: Event) => {
       updateTimelineWidth(e);
       addTimestamps();
-      if (!didRenderGaps.current) renderGaps(e);
+      // if (!didRenderGaps.current) renderGaps(e);
+      renderGaps(e);
     },
-    [updateTimelineWidth, addTimestamps, gaps]
+    [updateTimelineWidth, addTimestamps]
   );
 
   useEffect(() => {
@@ -233,8 +270,9 @@ export default function useTimeline() {
     timeDisplay,
     indicator,
     timeline,
-    timestamps,
+    // timestamps,
     timelineStartDate,
-    gaps,
+    metadataContainerRef,
+    // gaps,
   };
 }
