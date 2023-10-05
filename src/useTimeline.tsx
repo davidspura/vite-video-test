@@ -2,12 +2,9 @@ import {
   useCallback,
   useEffect,
   useRef,
-  useState,
   MouseEvent as ReactMouseEvent,
 } from "react";
-import { Box } from "@chakra-ui/react";
-import { hashCode, throttle } from "./lib/utils";
-import { nanoid } from "nanoid";
+import { hashCode } from "./lib/utils";
 import Player from "video.js/dist/types/player";
 
 type TimeRange = { start: string; end: string; id: number };
@@ -121,7 +118,6 @@ export default function useTimeline(player: Player | null) {
     (e: Event) => {
       updateTimelineWidth(e);
       addTimestamps();
-      // if (!didRenderGaps.current) renderGaps(e);
       renderGaps(e);
     },
     [updateTimelineWidth, addTimestamps]
@@ -150,7 +146,6 @@ export default function useTimeline(player: Player | null) {
 
     const timeWithOffset = originalTime - offset;
     if (timeWithOffset < 0) return 0;
-    // if (timeWithOffset < 0) return originalTime;
 
     const adjustedTime = Math.min(timeWithOffset, originalTime);
     return adjustedTime;
@@ -178,7 +173,6 @@ export default function useTimeline(player: Player | null) {
   const updateMetaTime = () => {
     const currentTime = new Date(
       new Date(timelineStartDate.current!).getTime() +
-        // video.current!.currentTime * 1000
         player!.currentTime() * 1000
     );
     timeDisplay.current!.innerText = `${currentTime.getHours()} : ${currentTime.getMinutes()} : ${currentTime.getSeconds()}`;
@@ -217,13 +211,11 @@ export default function useTimeline(player: Player | null) {
   };
 
   const addToCurrentTime = (t: number) => {
-    // video.current!.currentTime = video.current!.currentTime + t;
     player?.currentTime(player?.currentTime() + t);
     updateMetaTime();
   };
 
   const startDrag = (e: ReactMouseEvent) => {
-    // video.current?.pause();
     player?.pause();
     initialMouseX.current = e.pageX;
     let lastSeekDistance = 0;
@@ -247,7 +239,6 @@ export default function useTimeline(player: Player | null) {
         const currentSeekDistance = e.pageX - (mouseX.current || e.pageX);
         const trueSeekDistance = currentSeekDistance - lastSeekDistance;
         const currentTime = pxToTime(trueSeekDistance);
-        // console.log(video.current?.currentTime);
         addToCurrentTime(currentTime);
         lastSeekDistance = currentSeekDistance;
       }
@@ -266,7 +257,6 @@ export default function useTimeline(player: Player | null) {
     document.removeEventListener("mousemove", onMouseMove);
     document.removeEventListener("mouseup", stopDrag);
     isDragging.current = false;
-    // video.current?.play();
     player?.play();
 
     if (e.pageX === initialMouseX.current) {
@@ -282,9 +272,6 @@ export default function useTimeline(player: Player | null) {
     timeDisplay,
     indicator,
     timeline,
-    // timestamps,
-    timelineStartDate,
     metadataContainerRef,
-    // gaps,
   };
 }

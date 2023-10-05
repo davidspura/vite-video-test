@@ -43,23 +43,6 @@ export default function App() {
   }, []);
 
   const startPlayer = () => {
-    // const player =
-    //   videojs.getPlayer("playlist_video") || videojs("playlist_video");
-    // player.options({
-    //   liveui: true,
-    //   html5: {
-    //     vhs: {
-    //       overrideNative: true,
-    //       // maxPlaylistRetries: 200,
-    //       // allowSeeksWithinUnsafeLiveWindow: true,
-    //       // handlePartialData: true,
-    //       liveRangeSafeTimeDelta: 10,
-    //     },
-    //     nativeAudioTracks: false,
-    //     nativeVideoTracks: false,
-    //   },
-    // });
-
     // player.reloadSourceOnError();
 
     const player = videojs("playlist_video", {
