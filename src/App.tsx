@@ -15,11 +15,12 @@ import "video.js/dist/video-js.css";
 
 import Recorder from "./final/Recorder";
 import Timeline from "./Timeline";
+import Player from "video.js/dist/types/player";
 
 const Video = chakra("video");
 const Promise = createMediaRecorder();
 
-function App() {
+export default function App() {
   const [isReady, setIsReady] = useState(false);
   const isInitiated = useRef(false);
   const recorder = useRef<Recorder | null>(null);
@@ -27,6 +28,8 @@ function App() {
 
   const [playerDisabled, setPlayerDisabled] = useState(false);
   const [recorderDisabled, setRecorderDisabled] = useState(false);
+
+  const [_player, setPlayer] = useState<null | Player>(null);
 
   useEffect(() => {
     if (!isInitiated.current) {
@@ -57,12 +60,12 @@ function App() {
     //   },
     // });
 
-    // videojs.log.level("debug");
     // player.reloadSourceOnError();
 
     const player = videojs("playlist_video", {
       liveui: true,
     });
+    setPlayer(player);
 
     if (!player.paused()) return;
 
@@ -104,44 +107,7 @@ function App() {
       <Text>Preview</Text>
       {!isReady && <Spinner />}
       <Video id="preview" objectFit="contain" autoPlay muted />
-      {/* <Video id="playlist_video" controls muted /> */}
-
-      {/* <Video
-        id="static_playlist_video"
-        className="video-js vjs-default-skin"
-        controls
-        muted
-      >
-        <source
-          src="http://192.168.1.54:50507/index.m3u8"
-          type="application/x-mpegURL"
-        />
-      </Video> */}
-
-      <Timeline canStart={isReady} />
+      <Timeline canStart={isReady} player={_player} />
     </Box>
   );
 }
-
-export default App;
-
-// {isReady && (
-//   <>
-//     <Video
-//       ref={videoRef}
-//       id="playlist_video"
-//       className="video-js vjs-default-skin"
-//       controls
-//       preload="auto"
-//       muted
-//       data-setup="{}"
-//       onTimeUpdate={() => {
-//         console.log(videoRef.current?.currentTime);
-//       }}
-//     >
-//       <source src="/playlist.m3u8" type="application/x-mpegURL" />
-//     </Video>
-//     {/* <Player /> */}
-//     {timeline.render()}
-//   </>
-// )}

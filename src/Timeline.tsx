@@ -1,10 +1,17 @@
 import { Box, Flex, chakra } from "@chakra-ui/react";
 import useTimeline from "./useTimeline";
 import { useEffect, useState } from "react";
+import Player from "video.js/dist/types/player";
 
 const Video = chakra("video");
 
-export default function TestTimeline({ canStart }: { canStart: boolean }) {
+export default function TestTimeline({
+  canStart,
+  player,
+}: {
+  canStart: boolean;
+  player: Player | null;
+}) {
   const {
     onTimeUpdate,
     startDrag,
@@ -16,7 +23,7 @@ export default function TestTimeline({ canStart }: { canStart: boolean }) {
     timelineStartDate,
     metadataContainerRef,
     // gaps,
-  } = useTimeline();
+  } = useTimeline(player);
 
   if (!canStart) return null;
 

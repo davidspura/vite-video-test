@@ -8,6 +8,7 @@ import {
 import { Box } from "@chakra-ui/react";
 import { hashCode, throttle } from "./lib/utils";
 import { nanoid } from "nanoid";
+import Player from "video.js/dist/types/player";
 
 type TimeRange = { start: string; end: string; id: number };
 type EventData = {
@@ -24,7 +25,7 @@ const FIVE_MINUTE_IN_PX = 5 * 60 * pxBetweenSeconds;
 const timeToPx = (time: number) => time * pxBetweenSeconds;
 const pxToTime = (px: number) => px * 1.25;
 
-export default function useTimeline() {
+export default function useTimeline(player: Player | null) {
   const video = useRef<HTMLVideoElement>(null);
   const timeline = useRef<HTMLDivElement>(null);
   const indicator = useRef<HTMLDivElement>(null);
@@ -171,9 +172,14 @@ export default function useTimeline() {
     )}px`;
     timeline.current.style.left = `-${timeToPx(time)}px`;
 
+    updateMetaTime();
+  };
+
+  const updateMetaTime = () => {
     const currentTime = new Date(
       new Date(timelineStartDate.current!).getTime() +
-        video.current!.currentTime * 1000
+        // video.current!.currentTime * 1000
+        player!.currentTime() * 1000
     );
     timeDisplay.current!.innerText = `${currentTime.getHours()} : ${currentTime.getMinutes()} : ${currentTime.getSeconds()}`;
   };
@@ -211,11 +217,14 @@ export default function useTimeline() {
   };
 
   const addToCurrentTime = (t: number) => {
-    video.current!.currentTime = video.current!.currentTime + t;
+    // video.current!.currentTime = video.current!.currentTime + t;
+    player?.currentTime(player?.currentTime() + t);
+    updateMetaTime();
   };
 
   const startDrag = (e: ReactMouseEvent) => {
-    video.current?.pause();
+    // video.current?.pause();
+    player?.pause();
     initialMouseX.current = e.pageX;
     let lastSeekDistance = 0;
 
@@ -226,6 +235,7 @@ export default function useTimeline() {
 
     const drag = () => {
       if (!timeline.current) return;
+
       let distance: number;
       if (mouseX.current === null) distance = diff;
       else distance = diff + (e.pageX - mouseX.current);
@@ -237,6 +247,7 @@ export default function useTimeline() {
         const currentSeekDistance = e.pageX - (mouseX.current || e.pageX);
         const trueSeekDistance = currentSeekDistance - lastSeekDistance;
         const currentTime = pxToTime(trueSeekDistance);
+        // console.log(video.current?.currentTime);
         addToCurrentTime(currentTime);
         lastSeekDistance = currentSeekDistance;
       }
@@ -255,7 +266,8 @@ export default function useTimeline() {
     document.removeEventListener("mousemove", onMouseMove);
     document.removeEventListener("mouseup", stopDrag);
     isDragging.current = false;
-    video.current?.play();
+    // video.current?.play();
+    player?.play();
 
     if (e.pageX === initialMouseX.current) {
       onTimelineClick(e);

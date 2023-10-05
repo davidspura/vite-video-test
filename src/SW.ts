@@ -51,7 +51,7 @@ export default class SW {
       }
 
       if (type === "gap-init") {
-        const data = await this.playlist.getGapInit();
+        const data = await this.playlist.getGapInit(filename);
         this.post({ data, filename });
       }
 
