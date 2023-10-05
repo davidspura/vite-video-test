@@ -22,6 +22,7 @@ const TRANSCODER_RESET_TIME = 15 * 60000; // 15 minutes
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
 
+const LONGEST_GAP_DURATION = 6.997;
 const Settings = (function () {
   let hasUpdated = false;
   function getSkip(d: number) {
@@ -269,11 +270,13 @@ export class Playlist {
   private segmentGapData!: Uint8Array;
 
   loadGapFiles = async () => {
-    const initResponse = await fetch("/final_gap.mp4?sw_ignore=true");
+    const initResponse = await fetch("/gapFiles/gap.mp4?sw_ignore=true");
     const initBuffer = await initResponse.arrayBuffer();
     const initData = new Uint8Array(initBuffer);
 
-    const segmentResponse = await fetch("/gap0.m4s?sw_ignore=true");
+    const segmentResponse = await fetch(
+      "/gapFiles/gap_6.997_0.m4s?sw_ignore=true"
+    );
     const segmentBuffer = await segmentResponse.arrayBuffer();
     const segmentData = new Uint8Array(segmentBuffer);
 
@@ -281,7 +284,7 @@ export class Playlist {
     this.segmentGapData = segmentData;
   };
 
-  getGapInit = async () => {
+  getGapInit = async (filename: string) => {
     return this.initGapData;
   };
 
@@ -781,11 +784,11 @@ class DbController {
     let seconds = timeDifference / 1000;
     const gaps: number[] = [];
 
-    while (seconds >= Settings.TARGETDURATION) {
-      gaps.push(Settings.TARGETDURATION);
-      seconds -= Settings.TARGETDURATION;
+    while (seconds >= LONGEST_GAP_DURATION) {
+      gaps.push(LONGEST_GAP_DURATION);
+      seconds -= LONGEST_GAP_DURATION;
     }
-    if (seconds > 0) gaps.push(seconds);
+    if (seconds > 0.02) gaps.push(seconds);
 
     const { initIndex, segmentIndex: startSegmentIndex } =
       await this.getNextUsableIndexes();
