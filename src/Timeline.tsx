@@ -19,10 +19,7 @@ export default function TestTimeline({
     timeDisplay,
     indicator,
     timeline,
-    // timestamps,
-    timelineStartDate,
     metadataContainerRef,
-    // gaps,
   } = useTimeline(player);
 
   if (!canStart) return null;

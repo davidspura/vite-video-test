@@ -27,12 +27,18 @@ export default function useTimeline(player: Player | null) {
   const timeline = useRef<HTMLDivElement>(null);
   const indicator = useRef<HTMLDivElement>(null);
   const timelineStartDate = useRef<string | null>(null);
+
   const isDragging = useRef(false);
   const mouseX = useRef<null | number>(null);
   const initialMouseX = useRef<null | number>(null);
+
   const timeDisplay = useRef<HTMLDivElement>(null);
   const metadataContainerRef = useRef<HTMLDivElement>(null);
   const originalTimelineStartDate = useRef<string | null>(null);
+
+  const trueTimelineWidth = useRef(0);
+  const previousTime = useRef(0);
+  const manualVisualSyncTimeout = useRef<number | null>(null);
 
   const updateTimelineWidth = useCallback((e: Event) => {
     const { detail } = e as TimelineEvent;
@@ -42,7 +48,9 @@ export default function useTimeline(player: Player | null) {
       originalTimelineStartDate.current = startDate;
 
     const width = timeToPx(duration / 1000);
-    if (timeline.current) timeline.current.style.width = `${width}px`;
+    if (trueTimelineWidth.current === 0 && timeline.current)
+      timeline.current.style.width = `${width}px`;
+    trueTimelineWidth.current = width;
   }, []);
 
   const addTimestamps = useCallback(() => {
@@ -127,6 +135,8 @@ export default function useTimeline(player: Player | null) {
     document.addEventListener("duration-update", onDurationUpdate);
     return () => {
       document.removeEventListener("duration-update", onDurationUpdate);
+      if (manualVisualSyncTimeout.current)
+        clearInterval(manualVisualSyncTimeout.current);
     };
   }, []);
 
@@ -167,7 +177,23 @@ export default function useTimeline(player: Player | null) {
     )}px`;
     timeline.current.style.left = `-${timeToPx(time)}px`;
 
+    syncVisuals();
+  };
+
+  const syncVisuals = (forceSync = false) => {
+    if (manualVisualSyncTimeout.current) {
+      clearTimeout(manualVisualSyncTimeout.current);
+      manualVisualSyncTimeout.current = null;
+    }
+
     updateMetaTime();
+    updateTimelineVisualWidth(forceSync);
+
+    manualVisualSyncTimeout.current = setTimeout(() => {
+      console.log("Timeout");
+      manualVisualSyncTimeout.current = null;
+      syncVisuals(true);
+    }, 1000);
   };
 
   const updateMetaTime = () => {
@@ -176,6 +202,22 @@ export default function useTimeline(player: Player | null) {
         player!.currentTime() * 1000
     );
     timeDisplay.current!.innerText = `${currentTime.getHours()} : ${currentTime.getMinutes()} : ${currentTime.getSeconds()}`;
+  };
+
+  const updateTimelineVisualWidth = (forceUpdate = false) => {
+    if (!timeline.current || !player) return;
+    const currentTime = player.currentTime();
+    const timeUpdate = forceUpdate ? 1 : currentTime - previousTime.current;
+
+    const updateWidth = timeToPx(timeUpdate);
+    const currentWidth = timeline.current!.getBoundingClientRect().width;
+
+    const newWidth = currentWidth + updateWidth;
+    if (newWidth <= trueTimelineWidth.current) {
+      timeline.current.style.width = `${newWidth}px`;
+    }
+
+    previousTime.current = currentTime;
   };
 
   const onTimelineClick = (e: MouseEvent) => {
