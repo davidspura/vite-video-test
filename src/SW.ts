@@ -12,8 +12,6 @@ export default class SW {
 
   private init = async () => {
     navigator.serviceWorker.addEventListener("message", async (e) => {
-      // console.log("Received request from SW: ", e.data);
-
       if (!this.db) return;
       if (!this.playlist) return;
 
@@ -23,7 +21,6 @@ export default class SW {
       if (type === "file-request") {
         // will be done on CAMERA
         const file = await read(filename);
-        // console.log("Got file from DB: ", file.filename);
         const event = new CustomEvent("timeline-update", { detail: file });
         document.dispatchEvent(event);
         this.post(file);
@@ -51,7 +48,7 @@ export default class SW {
       }
 
       if (type === "gap-init") {
-        const data = await this.playlist.getGapInit(filename);
+        const data = await this.playlist.getGapInit();
         this.post({ data, filename });
       }
 

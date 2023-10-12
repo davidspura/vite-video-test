@@ -1,16 +1,6 @@
 import { loadPreview } from "../utils";
 import Recorder from "../final/Recorder";
-// import { createFFmpeg } from "@ffmpeg/ffmpeg";
-
 import SW from "../SW";
-
-
-// const ffmpeg = createFFmpeg({ log: false });
-// if (!ffmpeg.isLoaded())
-//   ffmpeg.load().then(() => {
-//     console.log("ffmpeg appended to window");
-//   });
-// window.ffmpeg = ffmpeg;
 
 export default async function createMediaRecorder() {
   const sw = new SW();
@@ -22,39 +12,5 @@ export default async function createMediaRecorder() {
   sw.playlist = recorder.playlist;
   await sw.start();
 
-  window.download = async () => {
-    const files = await recorder.db.getReadAll()();
-
-    const chunkSize = 10;
-    for (let i = 0; i < files.length; i += chunkSize) {
-      const chunk = files.slice(i, i + chunkSize);
-      download(chunk as unknown as any);
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-    }
-
-    function download(f: (HlsDbItem | HlsDbPlaylist)[]) {
-      for (const file of f) {
-        const url = URL.createObjectURL(
-          new Blob([file.data], { type: "application/octet-stream" })
-        );
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = file.filename;
-        a.click();
-        a.remove();
-      }
-    }
-  };
-
   return recorder;
 }
-
-// const url = URL.createObjectURL(
-//   new Blob([event.data], { type: "video/webm" })
-// );
-// const a = document.createElement("a");
-// a.href = url;
-// a.download = "video.webm";
-// a.click();
-// a.remove();
-// URL.revokeObjectURL(url);

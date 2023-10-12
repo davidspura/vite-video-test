@@ -24,7 +24,6 @@ export default function TestTimeline({
 
   if (!canStart) return null;
 
-  console.log("RERENDER");
   return (
     <>
       <Box
@@ -58,7 +57,6 @@ export default function TestTimeline({
           alignItems="center"
           direction="column"
         >
-          {/* <canvas ref={canvasRef} height="200" /> */}
           <Box userSelect="none" ref={timeDisplay}>
             Time
           </Box>
@@ -86,20 +84,6 @@ export default function TestTimeline({
                 ref={metadataContainerRef}
               >
                 <TimeStamps />
-                {/* {timestamps.map((_, i) => {
-                  const time = new Date(
-                    new Date(timelineStartDate.current!).getTime() +
-                      5 * i * 60000
-                  );
-                  return (
-                    <Box key={i} minW="240px">
-                      <Box display="inline-flex" transform="translateX(-50%)">
-                        {time.toDateString()}
-                      </Box>
-                    </Box>
-                  );
-                })} */}
-                {/* {gaps} */}
               </Flex>
             </Box>
           </Box>

@@ -1,4 +1,4 @@
-console.log("Alive");
+console.log("SW: alive");
 
 const IGNORE_TAG = "sw_ignore=true";
 const INITIAL_PLAYLIST = "playlist.m3u8";
@@ -8,12 +8,12 @@ const requests = new Map();
 const hslFilenames = [".m4s", ".mp4", ".m3u8"];
 
 self.addEventListener("activate", (event) => {
-  console.log("Activate event fired, claiming...");
+  console.log("SW: activate event fired, claiming...");
   event.waitUntil(clients.claim());
 });
 
 self.addEventListener("install", (event) => {
-  console.log("Install event fired ");
+  console.log("SW: install event fired ");
 });
 
 self.addEventListener("fetch", async (event) => {
@@ -36,9 +36,6 @@ self.addEventListener("fetch", async (event) => {
 
         try {
           const file = await waitForFile(filename);
-
-          // send("file-data", file);
-          // console.timeEnd("fetch");
           return new Response(file.data);
         } catch (err) {
           return new Response("Error");

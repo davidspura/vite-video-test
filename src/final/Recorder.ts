@@ -1,14 +1,7 @@
 import { FFmpeg, createFFmpeg } from "@ffmpeg/ffmpeg";
-import DB, { HlsDbItem } from "../DB";
 import { getGapFilename } from "../lib/getGapFilename";
+import DB from "../DB";
 
-
-let VALUE_CHECK: any;
-function CHECK_FOR_VALUE(value: any) {
-  if (value === VALUE_CHECK) console.log("=== READ VALUE ", value, " ===");
-}
-
-// const EIGHT_HOURS_IN_MS = 600000;
 const EIGHT_HOURS_IN_MS = 8 * 60 * 60 * 1000;
 const SEGMENT_LENGTH = 10000; // 10 seconds split into 2 second segment in Transcoder
 const SEGMENT_DURATION_REGEX = /#EXTINF:([\d.]+),/g;
@@ -18,8 +11,8 @@ const decoder = new TextDecoder();
 const encoder = new TextEncoder();
 
 const LONGEST_GAP_DURATION = 6.997;
+
 const Settings = (function () {
-  let hasUpdated = false;
   function getSkip(d: number) {
     return (d * 6).toFixed(1);
   }
@@ -50,22 +43,8 @@ const Settings = (function () {
     deltaPlaylistFallback_ = encoder.encode(deltaPlaylistFallbackString);
   }
 
-  const findAndUpdateLongestDuration = (durations: string[]) => {
-    if (hasUpdated) return;
-    let longetDuration = TARGETDURATION_;
-    durations.forEach((d) => {
-      const duration = Number(d);
-      if (duration > longetDuration) longetDuration = Math.ceil(duration);
-    });
-
-    console.log("Found longest duration: ", longetDuration, durations);
-    generateSettings(longetDuration);
-    hasUpdated = true;
-  };
-
   generateSettings();
   return {
-    findAndUpdateLongestDuration,
     get TARGETDURATION() {
       return TARGETDURATION_;
     },
@@ -152,16 +131,6 @@ export default class Recorder {
   };
 
   private onDataAvailable = async (event: BlobEvent) => {
-    // const url = URL.createObjectURL(
-    //   new Blob([event.data], { type: "video/webm" })
-    // );
-    // const a = document.createElement("a");
-    // a.href = url;
-    // a.download = "video.webm";
-    // a.click();
-    // a.remove();
-    // URL.revokeObjectURL(url);
-
     console.log("OnDataAvailable fired");
     this.dbController.deleteOlderThan(EIGHT_HOURS_IN_MS, () => {
       this.playlist.discontinuitySequence += 1;
@@ -279,7 +248,7 @@ export class Playlist {
     this.segmentGapData = segmentData;
   };
 
-  getGapInit = async (filename: string) => {
+  getGapInit = async () => {
     return this.initGapData;
   };
 
@@ -915,7 +884,6 @@ class DbController {
   };
 }
 
-type TimeRange = { start: string; end: string; id: number };
 class GapTimeRanges {
   private static index = 0;
   static _timeRanges: { [key: string]: TimeRange } = {};

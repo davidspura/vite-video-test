@@ -38,18 +38,8 @@ export default class DB {
 
   createTransaction = (mode: IDBTransactionMode) => {
     if (!this.db) throw Error("Transaction couldn't be created, db is null");
-    // console.log("Creating transaction");
     const transaction = this.db.transaction(STORE_NAME, mode);
     const objectStore = transaction.objectStore(STORE_NAME);
-    transaction.oncomplete = (e) => {
-      // console.log("Transaction complete ", e);
-    };
-    transaction.onerror = (e) => {
-      // console.log("Transaction failed ", e);
-    };
-    transaction.onabort = (e) => {
-      // console.log("Transaction aborted ", e);
-    };
     return objectStore;
   };
 
@@ -58,12 +48,9 @@ export default class DB {
     return (hlsItem: HlsDbItem) =>
       new Promise((resolve, reject) => {
         const request = objectStore.put(hlsItem);
-        request.onsuccess = (e) => {
-          // console.log("DB 'write' OK");
-          resolve(e);
-        };
+        request.onsuccess = (e) => resolve(e);
         request.onerror = (e) => {
-          // console.log("DB 'write' failed ", e);
+          console.log("DB: 'write' failed ", e);
           reject();
         };
       });
@@ -78,20 +65,23 @@ export default class DB {
 
         const request = index.openCursor(singleKeyRange);
 
-        request.onsuccess = (e) => {
-          const cursor = (e.target as IDBRequest<IDBCursorWithValue>).result;
+        request.onsuccess = (event) => {
+          const cursor = (event.target as IDBRequest<IDBCursorWithValue>)
+            .result;
           if (cursor) {
             const request = cursor.delete();
-            request.onsuccess = () => {
-              resolve(e);
-            };
+            request.onsuccess = (e) => resolve(e);
             request.onerror = (e) => {
+              console.log("DB: 'delete' failed ", e);
               reject();
             };
           }
         };
 
-        request.onerror = () => console.log("DB 'delete' failed");
+        request.onerror = (e) => {
+          console.log("DB: 'delete' failed ", e);
+          reject();
+        };
       });
   };
 
@@ -103,11 +93,10 @@ export default class DB {
         const request = index.get(filename);
         request.onsuccess = (e) => {
           const result = (e.target as IDBRequest<HlsDbItem>).result;
-          // console.log(`DB 'read' OK for ${filename}: `, result, e);
           resolve(result);
         };
         request.onerror = (e) => {
-          console.log("DB 'read' failed ", e);
+          console.log("DB: 'read' failed ", e);
           reject();
         };
       });
@@ -121,11 +110,10 @@ export default class DB {
         const request = index.getAll();
         request.onsuccess = (e) => {
           const result = (e.target as IDBRequest<HlsDbItem[]>).result;
-          // console.log("DB 'read ALL' OK");
           resolve(result);
         };
         request.onerror = (e) => {
-          // console.log("DB 'read ALL' failed");
+          console.log("DB: 'read ALL' failed");
           reject();
         };
       });
