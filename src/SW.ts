@@ -1,5 +1,5 @@
-import DB from "./DB";
-import { Playlist } from "./final/Recorder";
+import DB from "./Recorder/DB";
+import { Playlist } from "./Recorder/Recorder";
 
 export default class SW {
   db: DB | null = null;

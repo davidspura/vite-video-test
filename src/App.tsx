@@ -13,7 +13,7 @@ import createMediaRecorder from "./MediaRecorder/RecorderPreview";
 import videojs from "video.js";
 import "video.js/dist/video-js.css";
 
-import Recorder from "./final/Recorder";
+import Recorder from "./Recorder/Recorder";
 import Timeline from "./Timeline";
 import Player from "video.js/dist/types/player";
 

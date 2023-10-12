@@ -1,7 +1,7 @@
-import { Box, Flex, chakra } from "@chakra-ui/react";
-import useTimeline from "./useTimeline";
 import { useEffect, useState } from "react";
+import { Box, Flex, chakra } from "@chakra-ui/react";
 import Player from "video.js/dist/types/player";
+import useTimeline from "./useTimeline";
 
 const Video = chakra("video");
 

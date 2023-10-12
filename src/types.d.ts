@@ -31,3 +31,6 @@ type TimelineEventData = {
 };
 
 type TimelineEvent = CustomEvent<TimelineEventData>;
+type DB = import("./Recorder/DB").default;
+type DbController = import("./Recorder/modules/DbController").default;
+type Playlist = import("./Recorder/modules/Playlist").default;

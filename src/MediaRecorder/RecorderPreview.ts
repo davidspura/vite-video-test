@@ -1,5 +1,5 @@
 import { loadPreview } from "../utils";
-import Recorder from "../final/Recorder";
+import Recorder from "../Recorder/Recorder";
 import SW from "../SW";
 
 export default async function createMediaRecorder() {
