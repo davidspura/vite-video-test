@@ -4,7 +4,6 @@ import {
   useRef,
   MouseEvent as ReactMouseEvent,
 } from "react";
-import { hashCode } from "./lib/utils";
 import Player from "video.js/dist/types/player";
 
 type TimeRange = { start: string; end: string; id: number };
