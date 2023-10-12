@@ -583,9 +583,9 @@ export class Transcoder {
   private create = () => {
     this.ffmpeg = createFFmpeg({
       log: false,
-      corePath: "/dist/ffmpeg-core.js",
-      wasmPath: "/dist/ffmpeg-core.wasm",
-      workerPath: "/dist/ffmpeg-core.worker.js",
+      corePath: "/ffmpeg/ffmpeg-core.js",
+      wasmPath: "/ffmpeg/ffmpeg-core.wasm",
+      workerPath: "/ffmpeg/ffmpeg-core.worker.js",
     });
   };
 
