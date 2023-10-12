@@ -1,21 +1,3 @@
-export type ImageRotation =
-  | "ROTATION_0"
-  | "ROTATION_90"
-  | "ROTATION_180"
-  | "ROTATION_270";
-
-export type HlsDbItem = {
-  index: number;
-  filename: string;
-  data: Uint8Array;
-  createdAt: string;
-  duration: string | null;
-  discontinuity: boolean;
-  rotation: ImageRotation;
-  isUneven?: boolean;
-  initFilename?: string;
-};
-
 const DB_NAME = "hls-database";
 const STORE_NAME = "hls-files";
 const DATE_INDEX = "createdAt";

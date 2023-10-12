@@ -4,19 +4,6 @@ import Recorder from "../final/Recorder";
 
 import SW from "../SW";
 
-type HlsDbItem = {
-  filename: string;
-  data: Uint8Array;
-  createdAt: string;
-  rotation: "horizontal";
-};
-
-type HlsDbPlaylist = {
-  filename: string;
-  data: string;
-  createdAt: string;
-  rotation: "horizontal";
-};
 
 // const ffmpeg = createFFmpeg({ log: false });
 // if (!ffmpeg.isLoaded())

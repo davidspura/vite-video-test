@@ -2,11 +2,6 @@ import { FFmpeg, createFFmpeg } from "@ffmpeg/ffmpeg";
 import DB, { HlsDbItem } from "../DB";
 import { getGapFilename } from "../lib/getGapFilename";
 
-type PlaylistPayload = {
-  data: Uint8Array;
-  startDate?: string;
-  duration?: number;
-};
 
 let VALUE_CHECK: any;
 function CHECK_FOR_VALUE(value: any) {

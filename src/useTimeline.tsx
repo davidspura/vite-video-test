@@ -5,14 +5,7 @@ import {
   MouseEvent as ReactMouseEvent,
 } from "react";
 import Player from "video.js/dist/types/player";
-
-type TimeRange = { start: string; end: string; id: number };
-type EventData = {
-  duration: number;
-  startDate: string;
-  gaps: TimeRange[];
-};
-type TimelineEvent = CustomEvent<EventData>;
+import { hashCode } from "./utils";
 
 const indicatorWidthInPx = 4;
 const pxBetweenSeconds = 0.8;
