@@ -207,10 +207,15 @@ export default function useTimeline(player: Player | null) {
   const updateTimelineVisualWidth = (forceUpdate = false) => {
     if (!timeline.current || !player) return;
     const currentTime = player.currentTime();
+    if (
+      previousTime.current > currentTime ||
+      Math.abs(previousTime.current - currentTime) > 1
+    )
+      previousTime.current = currentTime;
     const timeUpdate = forceUpdate ? 1 : currentTime - previousTime.current;
 
     const updateWidth = secondsToPx(timeUpdate);
-    const currentWidth = timeline.current.getBoundingClientRect().width;
+    const currentWidth = timeline.current!.getBoundingClientRect().width;
 
     const newWidth = currentWidth + updateWidth;
     if (newWidth <= trueTimelineWidth.current) {
