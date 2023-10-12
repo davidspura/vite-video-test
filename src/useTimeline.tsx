@@ -19,7 +19,7 @@ const indicatorWidthInPx = 4;
 const pxBetweenSeconds = 0.8;
 const FIVE_MINUTE_IN_PX = 5 * 60 * pxBetweenSeconds;
 
-const timeToPx = (time: number) => time * pxBetweenSeconds;
+const secondsToPx = (seconds: number) => seconds * pxBetweenSeconds;
 const pxToTime = (px: number) => px * 1.25;
 
 export default function useTimeline(player: Player | null) {
@@ -40,6 +40,8 @@ export default function useTimeline(player: Player | null) {
   const previousTime = useRef(0);
   const manualVisualSyncTimeout = useRef<number | null>(null);
 
+  const gapMap = useRef(new Map<string, TimeRange & { elementId: string }>());
+
   const updateTimelineWidth = useCallback((e: Event) => {
     const { detail } = e as TimelineEvent;
     const { duration, startDate } = detail;
@@ -47,7 +49,7 @@ export default function useTimeline(player: Player | null) {
     if (!originalTimelineStartDate.current)
       originalTimelineStartDate.current = startDate;
 
-    const width = timeToPx(duration / 1000);
+    const width = secondsToPx(duration / 1000);
     if (trueTimelineWidth.current === 0 && timeline.current)
       timeline.current.style.width = `${width}px`;
     trueTimelineWidth.current = width;
@@ -66,8 +68,6 @@ export default function useTimeline(player: Player | null) {
     });
     document.dispatchEvent(event);
   }, []);
-
-  const gapMap = useRef(new Map<string, TimeRange & { elementId: string }>());
 
   const renderGaps = useCallback((e: Event) => {
     if (!metadataContainerRef.current || !timelineStartDate.current) return;
@@ -90,8 +90,8 @@ export default function useTimeline(player: Player | null) {
       const width =
         new Date(range.end).getTime() - new Date(range.start).getTime();
 
-      gapEl.style.left = timeToPx(startTime / 1000) + "px";
-      gapEl.style.width = timeToPx(width / 1000) + "px";
+      gapEl.style.left = secondsToPx(startTime / 1000) + "px";
+      gapEl.style.width = secondsToPx(width / 1000) + "px";
 
       metadataContainerRef.current?.append(gapEl);
     };
@@ -172,10 +172,10 @@ export default function useTimeline(player: Player | null) {
     const time = getTimelineOffsetTime();
     const timelineStartDateOffset = getTimelineStartDateOffset();
 
-    timeline.current.style.backgroundPositionX = `-${timeToPx(
+    timeline.current.style.backgroundPositionX = `-${secondsToPx(
       timelineStartDateOffset
     )}px`;
-    timeline.current.style.left = `-${timeToPx(time)}px`;
+    timeline.current.style.left = `-${secondsToPx(time)}px`;
 
     syncVisuals();
   };
@@ -209,8 +209,8 @@ export default function useTimeline(player: Player | null) {
     const currentTime = player.currentTime();
     const timeUpdate = forceUpdate ? 1 : currentTime - previousTime.current;
 
-    const updateWidth = timeToPx(timeUpdate);
-    const currentWidth = timeline.current!.getBoundingClientRect().width;
+    const updateWidth = secondsToPx(timeUpdate);
+    const currentWidth = timeline.current.getBoundingClientRect().width;
 
     const newWidth = currentWidth + updateWidth;
     if (newWidth <= trueTimelineWidth.current) {
