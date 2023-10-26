@@ -1,5 +1,4 @@
 import DB from "./Recorder/DB";
-import { Playlist } from "./Recorder/Recorder";
 
 export default class SW {
   db: DB | null = null;
@@ -70,6 +69,7 @@ export default class SW {
     const registration = await navigator.serviceWorker.register(
       this.workerPath
     );
+
     return new Promise((resolve) => {
       if (!registration.active) {
         const onStateChange = () => {

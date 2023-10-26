@@ -1,7 +1,6 @@
 import { isGapFile } from "../extensions";
 
 export default class GapTimeRanges {
-  private static index = 0;
   static _timeRanges: { [key: string]: TimeRange } = {};
   private static previousFile: HlsDbItem | null = null;
   private static currentTimeRange: Partial<TimeRange> = {};
@@ -11,10 +10,7 @@ export default class GapTimeRanges {
     return Object.values(this._timeRanges);
   }
 
-  private static _addToTimeRange = (
-    item: HlsDbItem,
-    { log } = { log: false }
-  ) => {
+  private static _addToTimeRange = (item: HlsDbItem) => {
     const _isGapFile = isGapFile(item);
     const isGapStart =
       (!this.previousFile || !isGapFile(this.previousFile)) && _isGapFile;
@@ -22,32 +18,19 @@ export default class GapTimeRanges {
       this.previousFile && isGapFile(this.previousFile) && !_isGapFile;
 
     if (isGapStart) {
-      if (log)
-        console.log(
-          "found gap start: ",
-          item.createdAt,
-          new Date(item.createdAt).toLocaleTimeString()
-        );
+      console.log("found gap start: ", item.createdAt);
       this.currentTimeRange.start = item.createdAt;
     }
     if (isGapEnd) {
-      if (log)
-        console.log(
-          "found gap end: ",
-          item.createdAt,
-          new Date(item.createdAt).toLocaleTimeString()
-        );
+      console.log("found gap end: ", item.createdAt);
       this.currentTimeRange.end = item.createdAt;
     }
 
     if (this.currentTimeRange.start && this.currentTimeRange.end) {
-      if (log)
-        console.log("ADDING new gap to timerange: ", this.currentTimeRange);
+      console.log("ADDING new gap to timerange: ", this.currentTimeRange);
 
-      this.currentTimeRange.id = this.index;
       this._timeRanges[item.createdAt] = this.currentTimeRange as TimeRange;
       this.currentTimeRange = {};
-      this.index++;
     }
 
     this.previousFile = item;
@@ -65,16 +48,13 @@ export default class GapTimeRanges {
     },
   };
 
-  static addToTimeRange = (
-    item: HlsDbItem | HlsDbItem[],
-    { log } = { log: false }
-  ) => {
+  static addToTimeRange = (item: HlsDbItem | HlsDbItem[]) => {
     if (Array.isArray(item)) {
       item.forEach((i) => {
-        this._addToTimeRange(i, { log });
+        this._addToTimeRange(i);
       });
     } else {
-      this._addToTimeRange(item, { log });
+      this._addToTimeRange(item);
     }
   };
 
@@ -84,9 +64,6 @@ export default class GapTimeRanges {
       !this.currentTimeRange.end &&
       this.previousFile
     ) {
-      this.currentTimeRange.id = this.index;
-      this.index++;
-
       this.currentTimeRange.end =
         this.endDate?.toISOString() || new Date().toISOString();
       console.log(
@@ -122,7 +99,6 @@ export default class GapTimeRanges {
           this._timeRanges[timerange.end] = {
             start: new Date(newStartTime).toISOString(),
             end: timerange.end,
-            id: timerange.id,
           };
         }
       }

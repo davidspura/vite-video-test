@@ -15,7 +15,6 @@ import "video.js/dist/video-js.css";
 
 import Recorder from "./Recorder/Recorder";
 import Timeline from "./Timeline";
-import Player from "video.js/dist/types/player";
 
 const Video = chakra("video");
 const Promise = createMediaRecorder();
@@ -24,12 +23,9 @@ export default function App() {
   const [isReady, setIsReady] = useState(false);
   const isInitiated = useRef(false);
   const recorder = useRef<Recorder | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
 
   const [playerDisabled, setPlayerDisabled] = useState(false);
   const [recorderDisabled, setRecorderDisabled] = useState(false);
-
-  const [_player, setPlayer] = useState<null | Player>(null);
 
   useEffect(() => {
     if (!isInitiated.current) {
@@ -48,7 +44,6 @@ export default function App() {
     const player = videojs("playlist_video", {
       liveui: true,
     });
-    setPlayer(player);
 
     if (!player.paused()) return;
 
@@ -90,7 +85,7 @@ export default function App() {
       <Text>Preview</Text>
       {!isReady && <Spinner />}
       <Video id="preview" objectFit="contain" autoPlay muted />
-      <Timeline canStart={isReady} player={_player} />
+      <Timeline canStart={isReady} />
     </Box>
   );
 }

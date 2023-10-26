@@ -176,7 +176,7 @@ export default class Playlist {
 
   generateDeltaPlaylist = async () => {
     if (this.lastSentDeltaPlaylist) {
-      console.log("Reusing old delta update...");
+      // console.log("Reusing old delta update...");
       return this.lastSentDeltaPlaylist;
     }
 
@@ -240,7 +240,7 @@ export default class Playlist {
             playlist = playlist.concat("\n" + playlistUpdate);
           });
         }
-        console.log("Created DELTA playlist");
+        // console.log("Created DELTA playlist");
         const encodedPlaylist = encoder.encode(playlist);
 
         if (!hadFiles) {

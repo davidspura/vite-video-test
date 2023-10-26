@@ -55,10 +55,10 @@ export default class Recorder {
 
     this.mediaRecorder?.start();
 
-    console.log("Called mediaRecorder.start()");
+    // console.log("Called mediaRecorder.start()");
     this.timeout = setTimeout(() => {
       this.mediaRecorder?.stop();
-      console.log("Called mediaRecorder.stop()");
+      // console.log("Called mediaRecorder.stop()");
       this.createSourceVideo();
     }, SEGMENT_LENGTH);
   };
@@ -76,7 +76,7 @@ export default class Recorder {
   };
 
   private onDataAvailable = async (event: BlobEvent) => {
-    console.log("OnDataAvailable fired");
+    // console.log("OnDataAvailable fired");
     this.dbController.deleteOlderThan(DELETE_THRESHOLD, () => {
       this.playlist.discontinuitySequence += 1;
     });
@@ -104,13 +104,13 @@ export default class Recorder {
   };
 
   private transcode = async (blob: Blob) => {
-    console.time("transcoding-time");
+    // console.time("transcoding-time");
     const { initData, segmentsData } = await this.transcoder.transcode({
       blob,
       includeInitData: !this.hasCreatedInitFile,
     });
 
-    console.timeEnd("transcoding-time");
+    // console.timeEnd("transcoding-time");
 
     let initFilename: string | undefined;
     if (initData) {
@@ -147,7 +147,7 @@ export default class Recorder {
         initFilename,
       };
       await write(segmentPayload);
-      console.log("DONE saving segment ", index);
+      // console.log("DONE saving segment ", index);
 
       this.sourceDate.setMilliseconds(
         this.sourceDate.getMilliseconds() + Number(duration) * 1000

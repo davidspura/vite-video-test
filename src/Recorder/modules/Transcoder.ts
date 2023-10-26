@@ -82,9 +82,9 @@ export default class Transcoder {
       "playlist.m3u8",
     ];
 
-    console.time("run-method");
+    // console.time("run-method");
     await this.ffmpeg.run(...options);
-    console.timeEnd("run-method");
+    // console.timeEnd("run-method");
 
     const ffmpegFilenames = this.ffmpeg.FS("readdir", "/");
     const playlistData = this.ffmpeg.FS("readFile", "playlist.m3u8");

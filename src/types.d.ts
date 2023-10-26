@@ -22,7 +22,7 @@ type PlaylistPayload = {
   duration?: number;
 };
 
-type TimeRange = { start: string; end: string; id: number };
+type TimeRange = { start: string; end: string };
 
 type TimelineEventData = {
   duration: number;
@@ -34,3 +34,13 @@ type TimelineEvent = CustomEvent<TimelineEventData>;
 type DB = import("./Recorder/DB").default;
 type DbController = import("./Recorder/modules/DbController").default;
 type Playlist = import("./Recorder/modules/Playlist").default;
+
+type CameraEvent = {
+  uniqueId: string;
+  start: string;
+  end: string;
+  intervalEvent: boolean;
+  type: "AWAKE" | "MOTION" | "CONNECT" | "DISCONNECT";
+  additionalData: string;
+  finished: boolean;
+};
