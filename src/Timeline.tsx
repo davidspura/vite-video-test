@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Box, Flex, Text, chakra, forwardRef } from "@chakra-ui/react";
+import { Box, Flex, Text, chakra } from "@chakra-ui/react";
 import useTimeline from "./useTimeline";
 
 const Video = chakra("video");
@@ -53,7 +53,7 @@ export default function TestTimeline({ canStart }: { canStart: boolean }) {
           <Box ref={indicator} w="4px" h="60px" bg="blue" pos="relative">
             <Flex
               ref={timeline}
-              bg="blackAlpha.700"
+              // bg="blackAlpha.700"
               w="0px"
               h="48px"
               alignItems="center"

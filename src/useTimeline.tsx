@@ -5,7 +5,12 @@ import {
   MouseEvent as ReactMouseEvent,
 } from "react";
 import { hashCode } from "./utils";
-import { pxToTime, secToMs, secondsToPx } from "./Recorder/extensions";
+import {
+  pxToTime,
+  secToMs,
+  secondsToPx,
+  strictIsEqual,
+} from "./Recorder/extensions";
 import { INDICATOR_PX_WIDTH, TIMESTAMP_PX_DISTANCE } from "./Recorder/const";
 import { testEvents } from "./mockupEvents";
 import useTimelineEvents from "./useTimelineEvents";
@@ -28,7 +33,11 @@ export default function useTimeline() {
   const previousTime = useRef(0);
   const manualVisualSyncTimeout = useRef<number | null>(null);
 
-  const gapMap = useRef(new Map<string, TimeRange & { elementId: string }>());
+  const gapMap = useRef(
+    new Map<string, { start: number; duration: number; elementId: string }>()
+  );
+  const lastReceivedGaps = useRef<TimeRange[] | null>(null);
+  const currentlyUpdatingRangeId = useRef<string | null>(null);
 
   const getCurrentPlayerDateTime = useCallback(() => {
     if (!video.current || !timelineStartDate.current) return 0;
@@ -55,8 +64,6 @@ export default function useTimeline() {
       renderEvents(testEvents);
     }, 10000);
   }, []);
-
-  console.log("rerender");
 
   const updateTimelineWidth = useCallback((e: Event) => {
     const { detail } = e as TimelineEvent;
@@ -87,27 +94,39 @@ export default function useTimeline() {
   }, []);
 
   const renderGaps = useCallback((e: Event) => {
-    if (!metadataContainer.current || !timelineStartDate.current) return;
+    if (
+      !metadataContainer.current ||
+      !timelineStartDate.current ||
+      !timeline.current
+    )
+      return;
     const { detail } = e as TimelineEvent;
     const { gaps: timeranges } = detail;
+    if (
+      lastReceivedGaps.current?.length === timeranges.length &&
+      strictIsEqual(timeranges[0], lastReceivedGaps.current[0])
+    )
+      return;
 
     const map = gapMap.current;
 
-    const render = (range: TimeRange & { elementId: string }) => {
+    const render = (range: {
+      elementId: string;
+      start: number;
+      duration: number;
+    }) => {
       const gapEl = document.createElement("div");
 
       gapEl.id = range.elementId;
       gapEl.style.height = "40px";
-      gapEl.style.background = "rgba(0, 0, 0, 0.4)";
+      gapEl.style.background = "rgba(0, 0, 0, 0.7)";
       gapEl.style.position = "absolute";
+
       const startTime =
-        new Date(range.start).getTime() -
-        new Date(timelineStartDate.current!).getTime();
-      const timeWidth =
-        new Date(range.end).getTime() - new Date(range.start).getTime();
+        range.start - new Date(timelineStartDate.current!).getTime();
 
       gapEl.style.left = secondsToPx(startTime / 1000) + "px";
-      gapEl.style.width = secondsToPx(timeWidth / 1000) + "px";
+      gapEl.style.width = secondsToPx(range.duration / 1000) + "px";
 
       metadataContainer.current?.append(gapEl);
     };
@@ -115,27 +134,73 @@ export default function useTimeline() {
       document.querySelector(`#${elementId}`)?.remove();
     };
 
-    timeranges.forEach((timerange) => {
-      const startDate = new Date(timerange.start);
-      const endDate = new Date(timerange.end);
-      const id = "id" + hashCode(startDate.toString() + endDate.toString());
-
-      const key = JSON.stringify(timerange);
-      if (!map.has(key)) {
-        console.log("Got new timerange, about to render & add to map");
-        const range = { ...timerange, elementId: id };
-        map.set(key, range);
-        render(range);
+    if (timeranges.length === 0) {
+      timeline.current.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
+      if (currentlyUpdatingRangeId.current) {
+        document
+          .querySelector(`#${currentlyUpdatingRangeId.current}`)
+          ?.remove();
+        currentlyUpdatingRangeId.current = null;
       }
-    });
-    for (let key of map.keys()) {
-      if (!timeranges.some((timerange) => JSON.stringify(timerange) === key)) {
-        console.log("Found old timerange, about to remove from map and DOM");
-        const range = map.get(key);
-        if (range) remove(range.elementId);
-        map.delete(key);
+    } else {
+      timeline.current.style.backgroundColor = "transparent";
+      let playableRangeStartTime = new Date(
+        timelineStartDate.current
+      ).getTime();
+      timeranges.forEach((timerange) => {
+        const startDate = new Date(timerange.start);
+        const endDate = new Date(timerange.end);
+        const id = "id" + hashCode(startDate.toString() + endDate.toString());
+
+        const key = JSON.stringify(timerange);
+        if (!map.has(key)) {
+          const range = {
+            elementId: id,
+            start: playableRangeStartTime,
+            duration:
+              new Date(timerange.start).getTime() - playableRangeStartTime,
+          };
+          console.log("Got new timerange, about to render & add to map", range);
+          map.set(key, range);
+          render(range);
+        }
+        playableRangeStartTime = new Date(timerange.end).getTime();
+      });
+      for (let key of map.keys()) {
+        if (
+          !timeranges.some((timerange) => JSON.stringify(timerange) === key)
+        ) {
+          console.log("Found old timerange, about to remove from map and DOM");
+          const range = map.get(key);
+          if (range) remove(range.elementId);
+          map.delete(key);
+        }
+      }
+
+      if (currentlyUpdatingRangeId.current) {
+        document
+          .querySelector(`#${currentlyUpdatingRangeId.current}`)
+          ?.remove();
+        currentlyUpdatingRangeId.current = null;
+      }
+
+      const lastGap = timeranges[timeranges.length - 1];
+      const endTime =
+        new Date(timelineStartDate.current).getTime() +
+        pxToTime(timeline.current.getBoundingClientRect().width) * 1000;
+
+      if (!currentlyUpdatingRangeId.current) {
+        const elementId = "id" + hashCode(lastGap.start + lastGap.end);
+        const lastPlayableRange = {
+          elementId,
+          start: new Date(lastGap.end).getTime(),
+          duration: endTime - new Date(lastGap.end).getTime(),
+        };
+        render(lastPlayableRange);
+        currentlyUpdatingRangeId.current = elementId;
       }
     }
+    lastReceivedGaps.current = timeranges;
   }, []);
 
   const renderEvents = useCallback(
@@ -304,6 +369,12 @@ export default function useTimeline() {
     const newWidth = currentWidth + updateWidth;
     if (newWidth <= trueTimelineWidth.current) {
       timeline.current.style.width = `${newWidth}px`;
+
+      const currentlyUpdatingRange = document.querySelector<HTMLDivElement>(
+        `#${currentlyUpdatingRangeId.current}`
+      );
+      if (currentlyUpdatingRange)
+        currentlyUpdatingRange.style.width = `${newWidth}px`;
     }
 
     previousTime.current = currentTime;

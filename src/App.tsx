@@ -55,7 +55,7 @@ export default function App() {
   };
 
   return (
-    <Box p="1rem">
+    <Box p="1rem" bg="purple">
       <Flex align="center" mb="1rem" columnGap="1rem">
         <Button
           onClick={() => {
