@@ -4,13 +4,13 @@ import {
   useRef,
   MouseEvent as ReactMouseEvent,
 } from "react";
-import Player from "video.js/dist/types/player";
 import { hashCode } from "./utils";
 import { pxToTime, secToMs, secondsToPx } from "./Recorder/extensions";
 import { INDICATOR_PX_WIDTH, TIMESTAMP_PX_DISTANCE } from "./Recorder/const";
+import { testEvents } from "./mockupEvents";
+import useTimelineEvents from "./useTimelineEvents";
 
-
-export default function useTimeline(player: Player | null) {
+export default function useTimeline() {
   const video = useRef<HTMLVideoElement>(null);
   const timeline = useRef<HTMLDivElement>(null);
   const indicator = useRef<HTMLDivElement>(null);
@@ -21,7 +21,7 @@ export default function useTimeline(player: Player | null) {
   const initialMouseX = useRef<null | number>(null);
 
   const timeDisplay = useRef<HTMLDivElement>(null);
-  const metadataContainerRef = useRef<HTMLDivElement>(null);
+  const metadataContainer = useRef<HTMLDivElement>(null);
   const originalTimelineStartDate = useRef<string | null>(null);
 
   const trueTimelineWidth = useRef(0);
@@ -29,6 +29,34 @@ export default function useTimeline(player: Player | null) {
   const manualVisualSyncTimeout = useRef<number | null>(null);
 
   const gapMap = useRef(new Map<string, TimeRange & { elementId: string }>());
+
+  const getCurrentPlayerDateTime = useCallback(() => {
+    if (!video.current || !timelineStartDate.current) return 0;
+    return (
+      new Date(timelineStartDate.current).getTime() +
+      secToMs(video.current.currentTime)
+    );
+  }, []);
+
+  const {
+    mapEvents,
+    updateMetaEvent,
+    startUpdatingCurrentEvent,
+    stopUpdatingCurrentEvent,
+  } = useTimelineEvents(getCurrentPlayerDateTime);
+
+  const didRender = useRef(false);
+  useEffect(() => {
+    if (didRender.current) return;
+    didRender.current = true;
+
+    setTimeout(() => {
+      mapEvents(testEvents);
+      renderEvents(testEvents);
+    }, 10000);
+  }, []);
+
+  console.log("rerender");
 
   const updateTimelineWidth = useCallback((e: Event) => {
     const { detail } = e as TimelineEvent;
@@ -40,6 +68,7 @@ export default function useTimeline(player: Player | null) {
     const width = secondsToPx(duration / 1000);
     if (trueTimelineWidth.current === 0 && timeline.current)
       timeline.current.style.width = `${width}px`;
+
     trueTimelineWidth.current = width;
   }, []);
 
@@ -47,7 +76,7 @@ export default function useTimeline(player: Player | null) {
     if (!timeline.current) return;
     const numberOfTimestamps =
       Math.floor(
-        timeline.current.getBoundingClientRect().width / FIVE_MINUTE_IN_PX
+        timeline.current.getBoundingClientRect().width / TIMESTAMP_PX_DISTANCE
       ) + 1;
     const timestamps = new Array(numberOfTimestamps).fill(1) as number[];
 
@@ -58,7 +87,7 @@ export default function useTimeline(player: Player | null) {
   }, []);
 
   const renderGaps = useCallback((e: Event) => {
-    if (!metadataContainerRef.current || !timelineStartDate.current) return;
+    if (!metadataContainer.current || !timelineStartDate.current) return;
     const { detail } = e as TimelineEvent;
     const { gaps: timeranges } = detail;
 
@@ -69,19 +98,18 @@ export default function useTimeline(player: Player | null) {
 
       gapEl.id = range.elementId;
       gapEl.style.height = "40px";
-      gapEl.style.background = "red";
+      gapEl.style.background = "rgba(0, 0, 0, 0.4)";
       gapEl.style.position = "absolute";
-      gapEl.innerHTML = String(range.id);
       const startTime =
         new Date(range.start).getTime() -
         new Date(timelineStartDate.current!).getTime();
-      const width =
+      const timeWidth =
         new Date(range.end).getTime() - new Date(range.start).getTime();
 
       gapEl.style.left = secondsToPx(startTime / 1000) + "px";
-      gapEl.style.width = secondsToPx(width / 1000) + "px";
+      gapEl.style.width = secondsToPx(timeWidth / 1000) + "px";
 
-      metadataContainerRef.current?.append(gapEl);
+      metadataContainer.current?.append(gapEl);
     };
     const remove = (elementId: string) => {
       document.querySelector(`#${elementId}`)?.remove();
@@ -110,13 +138,47 @@ export default function useTimeline(player: Player | null) {
     }
   }, []);
 
+  const renderEvents = useCallback(
+    (events: (CameraEvent | CameraEvent[])[]) => {
+      const render = (event: CameraEvent) => {
+        const eventEl = document.createElement("div");
+
+        eventEl.id = event.uniqueId;
+        eventEl.style.zIndex = event.type === "AWAKE" ? "1" : "2";
+        eventEl.style.height = "12px";
+        eventEl.style.borderRadius = "24px";
+        eventEl.style.background =
+          event.type === "AWAKE"
+            ? "rgba(186, 26, 26, 0.85)"
+            : "rgba(103, 67, 203, 0.85)";
+        eventEl.style.position = "absolute";
+        const startTime =
+          new Date(event.start).getTime() -
+          new Date(timelineStartDate.current!).getTime();
+        const timeWidth =
+          new Date(event.end).getTime() - new Date(event.start).getTime();
+
+        eventEl.style.left = secondsToPx(startTime / 1000) + "px";
+        eventEl.style.width = secondsToPx(timeWidth / 1000) + "px";
+
+        metadataContainer.current?.append(eventEl);
+      };
+
+      events.forEach((event) => {
+        if (Array.isArray(event)) event.forEach((e) => render(e));
+        else render(event);
+      });
+    },
+    []
+  );
+
   const onDurationUpdate = useCallback(
     (e: Event) => {
       updateTimelineWidth(e);
       addTimestamps();
       renderGaps(e);
     },
-    [updateTimelineWidth, addTimestamps]
+    [updateTimelineWidth, addTimestamps, renderGaps]
   );
 
   useEffect(() => {
@@ -153,19 +215,46 @@ export default function useTimeline(player: Player | null) {
     return (new Date(timelineStartDate.current!).getTime() / 1000) % 60;
   };
 
+  const prevTimelineTime = useRef(0);
   const onTimeUpdate = () => {
     if (!video.current || !indicator.current || !timeline.current) return;
     if (isDragging.current) return;
 
-    const time = getTimelineOffsetTime();
+    const time = Math.round(getTimelineOffsetTime());
+
     const timelineStartDateOffset = getTimelineStartDateOffset();
 
-    timeline.current.style.backgroundPositionX = `-${secondsToPx(
-      timelineStartDateOffset
-    )}px`;
-    timeline.current.style.left = `-${secondsToPx(time)}px`;
+    if (time !== prevTimelineTime.current) {
+      timeline.current.style.backgroundPositionX = `-${secondsToPx(
+        timelineStartDateOffset
+      )}px`;
+      timeline.current.style.left = `-${secondsToPx(time)}px`;
+    }
+    prevTimelineTime.current = time;
 
     syncVisuals();
+    checkForDesync();
+  };
+
+  const checkForDesync = () => {
+    let isOutOfBounds = false;
+    const { left: indicatorLeftPos, right: indicatorRightPos } =
+      indicator.current!.getBoundingClientRect();
+    const {
+      left: timelineLeftPos,
+      right: timelineRightPos,
+      width,
+    } = timeline.current!.getBoundingClientRect();
+
+    if (timelineLeftPos >= indicatorLeftPos) isOutOfBounds = true;
+    if (indicatorRightPos >= timelineRightPos) isOutOfBounds = true;
+
+    if (isOutOfBounds) {
+      const remainingSpace = trueTimelineWidth.current - width;
+      console.log("OUT OF BOUNDS, reserves: ", remainingSpace);
+      if (timeline.current)
+        timeline.current.style.width = `${trueTimelineWidth.current}px`;
+    }
   };
 
   const syncVisuals = (forceSync = false) => {
@@ -176,30 +265,37 @@ export default function useTimeline(player: Player | null) {
 
     updateMetaTime();
     updateTimelineVisualWidth(forceSync);
+    if (!forceSync) updateMetaEvent();
 
     manualVisualSyncTimeout.current = setTimeout(() => {
-      console.log("Timeout");
+      console.log("Forcing timeline visual update");
       manualVisualSyncTimeout.current = null;
       syncVisuals(true);
     }, 1000);
   };
 
   const updateMetaTime = () => {
-    const currentTime = new Date(
-      new Date(timelineStartDate.current!).getTime() +
-        player!.currentTime() * 1000
-    );
-    timeDisplay.current!.innerText = `${currentTime.getHours()} : ${currentTime.getMinutes()} : ${currentTime.getSeconds()}`;
+    // could be merged with 'updateMetaEvent' function
+    if (!timelineStartDate.current) return;
+
+    const event = new CustomEvent("meta-time-update", {
+      detail: { time: getCurrentPlayerDateTime() },
+    });
+    document.dispatchEvent(event);
   };
 
   const updateTimelineVisualWidth = (forceUpdate = false) => {
-    if (!timeline.current || !player) return;
-    const currentTime = player.currentTime();
+    if (!timeline.current || !video.current) return;
+    const currentTime = Math.round(video.current.currentTime);
+    if (currentTime === previousTime.current && !forceUpdate) return;
+
     if (
       previousTime.current > currentTime ||
       Math.abs(previousTime.current - currentTime) > 1
-    )
+    ) {
+      console.log("SHOULD NOT HAPPEN WITHOUT SEEKING");
       previousTime.current = currentTime;
+    }
     const timeUpdate = forceUpdate ? 1 : currentTime - previousTime.current;
 
     const updateWidth = secondsToPx(timeUpdate);
@@ -239,19 +335,20 @@ export default function useTimeline(player: Player | null) {
       isOutOfBounds = true;
     }
     if (indicatorRightPos >= timelineRightPos) {
-      timeline.current!.style.left = `${-width + indicatorWidthInPx / 2}px`;
+      timeline.current!.style.left = `${-width + INDICATOR_PX_WIDTH / 2}px`;
       isOutOfBounds = true;
     }
     return isOutOfBounds;
   };
 
   const addToCurrentTime = (t: number) => {
-    player?.currentTime(player?.currentTime() + t);
+    if (!video.current) return;
+    video.current.currentTime = video.current.currentTime + t;
     updateMetaTime();
   };
 
   const startDrag = (e: ReactMouseEvent) => {
-    player?.pause();
+    video.current?.pause();
     initialMouseX.current = e.pageX;
     let lastSeekDistance = 0;
 
@@ -285,6 +382,7 @@ export default function useTimeline(player: Player | null) {
     document.addEventListener("mousemove", onMouseMove);
     document.addEventListener("mouseup", stopDrag);
     isDragging.current = true;
+    startUpdatingCurrentEvent();
     requestAnimationFrame(drag);
   };
 
@@ -292,12 +390,13 @@ export default function useTimeline(player: Player | null) {
     document.removeEventListener("mousemove", onMouseMove);
     document.removeEventListener("mouseup", stopDrag);
     isDragging.current = false;
-    player?.play();
+    video.current?.play();
 
     if (e.pageX === initialMouseX.current) {
       onTimelineClick(e);
     }
     initialMouseX.current = null;
+    stopUpdatingCurrentEvent();
   };
 
   return {
@@ -307,6 +406,6 @@ export default function useTimeline(player: Player | null) {
     timeDisplay,
     indicator,
     timeline,
-    metadataContainerRef,
+    metadataContainer,
   };
 }

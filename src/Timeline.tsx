@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Box, Flex, chakra } from "@chakra-ui/react";
+import { useEffect, useRef, useState } from "react";
+import { Box, Flex, Text, chakra, forwardRef } from "@chakra-ui/react";
 import useTimeline from "./useTimeline";
 
 const Video = chakra("video");
@@ -9,10 +9,10 @@ export default function TestTimeline({ canStart }: { canStart: boolean }) {
     onTimeUpdate,
     startDrag,
     video,
-    timeDisplay,
     indicator,
     timeline,
-    metadataContainerRef,
+    metadataContainer,
+  } = useTimeline();
 
   if (!canStart) return null;
 
@@ -49,35 +49,33 @@ export default function TestTimeline({ canStart }: { canStart: boolean }) {
           alignItems="center"
           direction="column"
         >
-          <Box userSelect="none" ref={timeDisplay}>
-            Time
-          </Box>
+          <MetaData />
           <Box ref={indicator} w="4px" h="60px" bg="blue" pos="relative">
-            <Box
+            <Flex
               ref={timeline}
-              h="48px"
               bg="blackAlpha.700"
-              // w="0px"
-              w="250px"
+              w="0px"
+              h="48px"
+              alignItems="center"
               left="0px"
               pos="absolute"
               top="50%"
               transform="translate(2px, -50%)"
               bgImage="/IntervalR.svg"
               bgRepeat="repeat-x"
+              overflow="hidden"
               sx={{ backgroundPositionY: "center" }}
               onMouseDown={startDrag}
             >
               <Flex
                 alignItems="center"
-                transform="translateY(54px)"
                 userSelect="none"
                 pos="relative"
-                ref={metadataContainerRef}
+                ref={metadataContainer}
               >
                 <TimeStamps />
               </Flex>
-            </Box>
+            </Flex>
           </Box>
         </Flex>
       </Box>
@@ -108,14 +106,55 @@ function TimeStamps() {
 
   if (!startDate) return null;
 
-  return timestamps.map((_, i) => {
-    const time = new Date(new Date(startDate).getTime() + 5 * i * 60000);
-    return (
-      <Box key={i} minW="240px" zIndex={2}>
-        <Box display="inline-flex" transform="translateX(-50%)">
-          {time.toLocaleTimeString()}
-        </Box>
-      </Box>
-    );
-  });
+  return (
+    <Flex transform="translateY(54px)" alignItems="center">
+      {timestamps.map((_, i) => {
+        const time = new Date(new Date(startDate).getTime() + 5 * i * 60000);
+        return (
+          <Box key={i} minW="240px" zIndex={2}>
+            <Box display="inline-flex" transform="translateX(-50%)">
+              {time.toLocaleTimeString()}
+            </Box>
+          </Box>
+        );
+      })}
+    </Flex>
+  );
+}
+
+function MetaData() {
+  const dateContainer = useRef<HTMLDivElement>(null);
+  const [events, setEvents] = useState<CameraEvent[]>([]);
+
+  useEffect(() => {
+    function updateMetaTime(e: Event) {
+      if (!dateContainer.current) return;
+      const { detail } = e as CustomEvent<{ time: number }>;
+      const date = new Date(detail.time);
+      dateContainer.current.innerText = `${date.getHours()} : ${date.getMinutes()} : ${date.getSeconds()}`;
+    }
+    function updateMetaEvents(e: Event) {
+      const { detail } = e as CustomEvent<{ events: CameraEvent[] }>;
+      console.log("Got event update: ", detail);
+      setEvents(detail.events);
+    }
+
+    document.addEventListener("meta-time-update", updateMetaTime);
+    document.addEventListener("meta-events-update", updateMetaEvents);
+    return () => {
+      document.removeEventListener("meta-time-update", updateMetaTime);
+      document.removeEventListener("meta-events-update", updateMetaEvents);
+    };
+  }, []);
+
+  return (
+    <Flex userSelect="none" alignItems="center" columnGap="1rem">
+      <Text ref={dateContainer}>
+        {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}
+      </Text>
+      {events.map((event) => {
+        return <Box key={event.uniqueId}>{event.type}</Box>;
+      })}
+    </Flex>
+  );
 }
