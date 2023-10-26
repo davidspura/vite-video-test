@@ -12,3 +12,8 @@ export const SW_IGNORE_TAG = "sw_ignore=true";
 export const INIT_EXT = ".mp4";
 export const SEGMENT_EXT = ".m4s";
 export const GAP_PREFIX = "g";
+
+export const INDICATOR_PX_WIDTH = 4;
+export const ONE_SECOND_IN_PX = 0.8;
+export const TIMESTAMP_PX_DISTANCE = 5 * 60 * ONE_SECOND_IN_PX;
+export const ONE_PX_IN_SECONDS = 1.25;

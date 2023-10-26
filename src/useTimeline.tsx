@@ -6,13 +6,9 @@ import {
 } from "react";
 import Player from "video.js/dist/types/player";
 import { hashCode } from "./utils";
+import { pxToTime, secToMs, secondsToPx } from "./Recorder/extensions";
+import { INDICATOR_PX_WIDTH, TIMESTAMP_PX_DISTANCE } from "./Recorder/const";
 
-const indicatorWidthInPx = 4;
-const pxBetweenSeconds = 0.8;
-const FIVE_MINUTE_IN_PX = 5 * 60 * pxBetweenSeconds;
-
-const secondsToPx = (seconds: number) => seconds * pxBetweenSeconds;
-const pxToTime = (px: number) => px * 1.25;
 
 export default function useTimeline(player: Player | null) {
   const video = useRef<HTMLVideoElement>(null);

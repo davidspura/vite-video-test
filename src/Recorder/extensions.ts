@@ -3,6 +3,8 @@ import {
   INIT_EXT,
   MAXIMUM_GAP_DURATION,
   MINIMUM_GAP_DURATION,
+  ONE_PX_IN_SECONDS,
+  ONE_SECOND_IN_PX,
   SEGMENT_EXT,
 } from "./const";
 
@@ -84,8 +86,42 @@ const getGapFilename = (duration: string) => {
   }
 
   const filename = `gap_${closestDuration.toFixed(3)}_0.m4s`;
-  console.log("Found gap filename: ", filename);
+  // console.log("Found gap filename: ", filename);
   return filename;
+};
+
+const secondsToPx = (seconds: number) => seconds * ONE_SECOND_IN_PX;
+const pxToTime = (px: number) => px * ONE_PX_IN_SECONDS;
+
+const getEventInDateRange = (ranges: CameraEvent[], date: Date) => {
+  // binary search
+  try {
+    let low = 0;
+    let high = ranges.length;
+
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2);
+      const startDate = new Date(ranges[mid].start);
+      const endDate = new Date(ranges[mid].end);
+
+      if (startDate <= date && endDate >= date) {
+        return ranges[mid];
+      } else if (startDate > date) {
+        high = mid - 1;
+      } else {
+        low = mid + 1;
+      }
+    }
+
+    return false;
+  } catch (err) {
+    // console.log(err);
+    return false;
+  }
+};
+
+const strictIsEqual = (compare: any, to: any) => {
+  return JSON.stringify(compare) === JSON.stringify(to);
 };
 
 export {
@@ -98,4 +134,8 @@ export {
   msToSeconds,
   secToMs,
   getGapFilename,
+  secondsToPx,
+  pxToTime,
+  getEventInDateRange,
+  strictIsEqual,
 };
