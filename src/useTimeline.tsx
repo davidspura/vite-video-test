@@ -33,7 +33,7 @@ export default function useTimeline() {
   const previousTime = useRef(0);
   const manualVisualSyncTimeout = useRef<number | null>(null);
 
-  const gapMap = useRef(
+  const playbaleRangesMap = useRef(
     new Map<string, { start: number; duration: number; elementId: string }>()
   );
   const lastReceivedGaps = useRef<TimeRange[] | null>(null);
@@ -93,7 +93,7 @@ export default function useTimeline() {
     document.dispatchEvent(event);
   }, []);
 
-  const renderGaps = useCallback((e: Event) => {
+  const renderPlayableRanges = useCallback((e: Event) => {
     if (
       !metadataContainer.current ||
       !timelineStartDate.current ||
@@ -101,53 +101,52 @@ export default function useTimeline() {
     )
       return;
     const { detail } = e as TimelineEvent;
-    const { gaps: timeranges } = detail;
+    const { gaps: gapTimeRanges } = detail;
+
     if (
-      lastReceivedGaps.current?.length === timeranges.length &&
-      strictIsEqual(timeranges[0], lastReceivedGaps.current[0])
+      lastReceivedGaps.current?.length === gapTimeRanges.length &&
+      strictIsEqual(gapTimeRanges[0], lastReceivedGaps.current[0])
     )
       return;
 
-    const map = gapMap.current;
-
+    const map = playbaleRangesMap.current;
     const render = (range: {
       elementId: string;
       start: number;
       duration: number;
     }) => {
-      const gapEl = document.createElement("div");
+      const playableRangeEl = document.createElement("div");
 
-      gapEl.id = range.elementId;
-      gapEl.style.height = "40px";
-      gapEl.style.background = "rgba(0, 0, 0, 0.7)";
-      gapEl.style.position = "absolute";
+      playableRangeEl.id = range.elementId;
+      playableRangeEl.style.height = "40px";
+      playableRangeEl.style.background = "rgba(0, 0, 0, 0.7)";
+      playableRangeEl.style.position = "absolute";
 
       const startTime =
         range.start - new Date(timelineStartDate.current!).getTime();
 
-      gapEl.style.left = secondsToPx(startTime / 1000) + "px";
-      gapEl.style.width = secondsToPx(range.duration / 1000) + "px";
+      playableRangeEl.style.left = secondsToPx(startTime / 1000) + "px";
+      playableRangeEl.style.width = secondsToPx(range.duration / 1000) + "px";
 
-      metadataContainer.current?.append(gapEl);
+      metadataContainer.current?.append(playableRangeEl);
     };
     const remove = (elementId: string) => {
       document.querySelector(`#${elementId}`)?.remove();
     };
+    const removeCurrentlyUpdatingRangeEl = () => {
+      document.querySelector(`#${currentlyUpdatingRangeId.current}`)?.remove();
+      currentlyUpdatingRangeId.current = null;
+    };
 
-    if (timeranges.length === 0) {
+    if (gapTimeRanges.length === 0) {
       timeline.current.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
-      if (currentlyUpdatingRangeId.current) {
-        document
-          .querySelector(`#${currentlyUpdatingRangeId.current}`)
-          ?.remove();
-        currentlyUpdatingRangeId.current = null;
-      }
+      if (currentlyUpdatingRangeId.current) removeCurrentlyUpdatingRangeEl();
     } else {
       timeline.current.style.backgroundColor = "transparent";
       let playableRangeStartTime = new Date(
         timelineStartDate.current
       ).getTime();
-      timeranges.forEach((timerange) => {
+      gapTimeRanges.forEach((timerange) => {
         const startDate = new Date(timerange.start);
         const endDate = new Date(timerange.end);
         const id = "id" + hashCode(startDate.toString() + endDate.toString());
@@ -168,7 +167,7 @@ export default function useTimeline() {
       });
       for (let key of map.keys()) {
         if (
-          !timeranges.some((timerange) => JSON.stringify(timerange) === key)
+          !gapTimeRanges.some((timerange) => JSON.stringify(timerange) === key)
         ) {
           console.log("Found old timerange, about to remove from map and DOM");
           const range = map.get(key);
@@ -177,14 +176,9 @@ export default function useTimeline() {
         }
       }
 
-      if (currentlyUpdatingRangeId.current) {
-        document
-          .querySelector(`#${currentlyUpdatingRangeId.current}`)
-          ?.remove();
-        currentlyUpdatingRangeId.current = null;
-      }
+      if (currentlyUpdatingRangeId.current) removeCurrentlyUpdatingRangeEl();
 
-      const lastGap = timeranges[timeranges.length - 1];
+      const lastGap = gapTimeRanges[gapTimeRanges.length - 1];
       const endTime =
         new Date(timelineStartDate.current).getTime() +
         pxToTime(timeline.current.getBoundingClientRect().width) * 1000;
@@ -200,7 +194,7 @@ export default function useTimeline() {
         currentlyUpdatingRangeId.current = elementId;
       }
     }
-    lastReceivedGaps.current = timeranges;
+    lastReceivedGaps.current = gapTimeRanges;
   }, []);
 
   const renderEvents = useCallback(
@@ -241,9 +235,9 @@ export default function useTimeline() {
     (e: Event) => {
       updateTimelineWidth(e);
       addTimestamps();
-      renderGaps(e);
+      renderPlayableRanges(e);
     },
-    [updateTimelineWidth, addTimestamps, renderGaps]
+    [updateTimelineWidth, addTimestamps, renderPlayableRanges]
   );
 
   useEffect(() => {

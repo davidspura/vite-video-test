@@ -53,7 +53,6 @@ export default function TestTimeline({ canStart }: { canStart: boolean }) {
           <Box ref={indicator} w="4px" h="60px" bg="blue" pos="relative">
             <Flex
               ref={timeline}
-              // bg="blackAlpha.700"
               w="0px"
               h="48px"
               alignItems="center"
