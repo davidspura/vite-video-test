@@ -1,4 +1,4 @@
-import { createFFmpeg, type FFmpeg } from "@ffmpeg/ffmpeg";
+import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { TRANSCODER_RESET_TIME } from "../const";
 import { decoder } from "../extensions";
 
@@ -7,19 +7,18 @@ export default class Transcoder {
   private ffmpeg!: FFmpeg;
   private initDate = new Date();
 
-  private create = () => {
-    this.ffmpeg = createFFmpeg({
-      log: false,
-      corePath: "/ffmpeg/ffmpeg-core.js",
-      wasmPath: "/ffmpeg/ffmpeg-core.wasm",
-      workerPath: "/ffmpeg/ffmpeg-core.worker.js",
+  private create = async () => {
+    this.ffmpeg = new FFmpeg();
+    await this.ffmpeg.load({
+      coreURL: `${location.origin}/ffmpeg/ffmpeg-core.js`,
+      wasmURL: `${location.origin}/ffmpeg/ffmpeg-core.wasm`,
     });
   };
 
   init = async () => {
     // create outside of the class
-    if (!this.ffmpeg) this.create();
-    if (!this.ffmpeg.isLoaded()) {
+    if (!this.ffmpeg) await this.create();
+    if (!this.ffmpeg.loaded) {
       console.time("Ffmpegloaded");
       await this.ffmpeg.load();
       console.timeEnd("Ffmpegloaded");
@@ -36,9 +35,9 @@ export default class Transcoder {
     const now = new Date().getTime();
     if (this.initDate.getTime() + TRANSCODER_RESET_TIME < now) {
       console.log("Creating new FFMPEG instance");
-      this.ffmpeg.exit();
+      this.ffmpeg.terminate();
 
-      if (!this.ffmpeg.isLoaded()) {
+      if (!this.ffmpeg.loaded) {
         console.time("Ffmpegloaded");
         await this.ffmpeg.load();
         console.timeEnd("Ffmpegloaded");
@@ -58,7 +57,7 @@ export default class Transcoder {
     if (!this.ffmpeg) console.error("Ffmpeg not initialized");
 
     const arrayBuffer = await blob.arrayBuffer();
-    this.ffmpeg.FS("writeFile", "input.webm", new Uint8Array(arrayBuffer));
+    this.ffmpeg.writeFile("input.webm", new Uint8Array(arrayBuffer));
 
     const options = [
       "-i",
@@ -83,11 +82,15 @@ export default class Transcoder {
     ];
 
     // console.time("run-method");
-    await this.ffmpeg.run(...options);
+    await this.ffmpeg.exec(options);
     // console.timeEnd("run-method");
 
-    const ffmpegFilenames = this.ffmpeg.FS("readdir", "/");
-    const playlistData = this.ffmpeg.FS("readFile", "playlist.m3u8");
+    const ffmpegFilenames = (await this.ffmpeg.listDir("/")).map(
+      (fsnode) => fsnode.name
+    );
+    const playlistData = (await this.ffmpeg.readFile(
+      "playlist.m3u8"
+    )) as Uint8Array;
 
     const segmentFilenames = ffmpegFilenames
       .filter((file) => file.includes("segment"))
@@ -97,23 +100,25 @@ export default class Transcoder {
       decoder.decode(playlistData)
     );
 
-    const segmentsData = segmentFilenames.map((filename, index) => {
-      const data = this.ffmpeg.FS("readFile", filename);
-      this.ffmpeg.FS("unlink", filename);
+    const segmentsData = await Promise.all(
+      segmentFilenames.map(async (filename, index) => {
+        const data = (await this.ffmpeg.readFile(filename)) as Uint8Array;
+        this.ffmpeg.deleteFile(filename);
 
-      return {
-        data,
-        duration: segmentDurations[index],
-      };
-    });
+        return {
+          data,
+          duration: segmentDurations[index],
+        };
+      })
+    );
 
     const initData = includeInitData
-      ? this.ffmpeg.FS("readFile", "init.mp4")
+      ? ((await this.ffmpeg.readFile("init.mp4")) as Uint8Array)
       : null;
 
-    this.ffmpeg.FS("unlink", "input.webm");
-    this.ffmpeg.FS("unlink", "playlist.m3u8");
-    this.ffmpeg.FS("unlink", "init.mp4");
+    this.ffmpeg.deleteFile("input.webm");
+    this.ffmpeg.deleteFile("playlist.m3u8");
+    this.ffmpeg.deleteFile("init.mp4");
 
     await this.refreshInstance();
     return {
