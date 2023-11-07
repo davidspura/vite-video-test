@@ -7,7 +7,7 @@ export const getStream = async () =>
 export const loadPreview = async () => {
   const stream = await getStream();
   const video = document.querySelector("#preview") as HTMLVideoElement;
-  video.srcObject = stream;
+  if (video) video.srcObject = stream;
   return stream;
 };
 

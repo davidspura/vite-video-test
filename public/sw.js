@@ -38,7 +38,7 @@ self.addEventListener("fetch", async (event) => {
           const file = await waitForFile(filename);
           return new Response(file.data);
         } catch (err) {
-          return new Response("Error");
+          return new Response("Error ", err);
         }
       })()
     );
@@ -48,7 +48,7 @@ self.addEventListener("fetch", async (event) => {
 const waitForFile = async (filename) => {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
-      reject();
+      reject("Timeout");
     }, 5000);
     requests.set(filename, (data) => {
       clearTimeout(timeout);
