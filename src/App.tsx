@@ -2,8 +2,8 @@ import {
   Box,
   Button,
   chakra,
-  Checkbox,
   Flex,
+  Portal,
   Spinner,
   Text,
 } from "@chakra-ui/react";
@@ -24,13 +24,11 @@ export default function App() {
   const isInitiated = useRef(false);
   const recorder = useRef<Recorder | null>(null);
 
-  const [playerDisabled, setPlayerDisabled] = useState(false);
-  const [recorderDisabled, setRecorderDisabled] = useState(false);
-
   useEffect(() => {
     if (!isInitiated.current) {
       Promise.then(async (r) => {
         recorder.current = r;
+        r.start();
       }).finally(() => {
         isInitiated.current = true;
         setIsReady(true);
@@ -39,8 +37,6 @@ export default function App() {
   }, []);
 
   const startPlayer = () => {
-    // player.reloadSourceOnError();
-
     const player = videojs("playlist_video", {
       liveui: true,
     });
@@ -55,37 +51,64 @@ export default function App() {
   };
 
   return (
-    <Box p="1rem" bg="purple">
-      <Flex align="center" mb="1rem" columnGap="1rem">
-        <Button
-          onClick={() => {
-            if (!recorderDisabled) recorder.current?.start();
-            if (!playerDisabled) startPlayer();
+    <Portal>
+      <Box
+        w="100vw"
+        h="100vh"
+        pos="fixed"
+        top="0px"
+        left="0px"
+        bg="black"
+        zIndex={2}
+      >
+        {!isReady && <Spinner />}
+        <Buttons
+          startPlayer={startPlayer}
+          stopRecorder={recorder.current?.stop}
+        />
+        <Box
+          pos="relative"
+          w="100%"
+          h="100%"
+          sx={{
+            video: {
+              maxW: "100vw",
+              maxH: "100vh",
+              w: "100%",
+              h: "100%",
+              objectFit: "contain",
+              bg: "black",
+            },
+            ".playlist_video-dimensions": {
+              width: "100% !important",
+              height: "100% !important",
+            },
           }}
         >
-          Start Recorder
-        </Button>
-        <Button onClick={recorder.current?.stop}>Stop</Button>
-      </Flex>
-      <Flex>
-        <Checkbox
-          mr="2rem"
-          onChange={() => setPlayerDisabled(!playerDisabled)}
-          defaultChecked={playerDisabled}
-        >
-          Disable Player
-        </Checkbox>
-        <Checkbox
-          onChange={() => setRecorderDisabled(!recorderDisabled)}
-          defaultChecked={recorderDisabled}
-        >
-          Disable Recorder
-        </Checkbox>
-      </Flex>
-      <Text>Preview</Text>
-      {!isReady && <Spinner />}
-      <Video id="preview" objectFit="contain" autoPlay muted />
-      <Timeline canStart={isReady} />
-    </Box>
+          <Timeline canStart={isReady} />
+        </Box>
+      </Box>
+    </Portal>
   );
 }
+
+const Buttons = ({
+  startPlayer,
+  stopRecorder,
+}: {
+  startPlayer: () => void;
+  stopRecorder: (() => void) | undefined;
+}) => (
+  <Flex
+    align="center"
+    mb="1rem"
+    columnGap="1rem"
+    pos="absolute"
+    top="12"
+    left="12"
+    zIndex={3}
+  >
+    <Button onClick={startPlayer}>Start Player</Button>
+    {/* <Button onClick={stopRecorder}>Stop Recorder</Button> */}
+  </Flex>
+);
