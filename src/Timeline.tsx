@@ -18,16 +18,7 @@ export default function TestTimeline({ canStart }: { canStart: boolean }) {
 
   return (
     <>
-      <Box
-        overflow="hidden"
-        userSelect="none"
-        sx={{
-          ".playlist_video-dimensions": {
-            width: "640px",
-            height: "480px",
-          },
-        }}
-      >
+      <Box overflow="hidden" userSelect="none" w="100%" h="100%">
         <Video
           ref={video}
           id="playlist_video"
@@ -37,45 +28,54 @@ export default function TestTimeline({ canStart }: { canStart: boolean }) {
           muted
           data-setup="{}"
           onTimeUpdate={onTimeUpdate}
-          maxW="100vw"
-          onError={(e) => console.log("CRASHED ", e)}
         />
         <Flex
-          maxW="100vw"
-          mt="4rem"
-          pos="relative"
-          mb="8rem"
-          justify="center"
+          pos="absolute"
+          bottom="14px"
+          left="96px"
+          right="144px"
+          h="56px"
           alignItems="center"
-          direction="column"
+          overflowX="clip"
         >
-          <MetaData />
-          <Box ref={indicator} w="4px" h="60px" bg="blue" pos="relative">
-            <Flex
-              ref={timeline}
-              w="0px"
-              h="48px"
-              alignItems="center"
-              left="0px"
+          <Flex w="100%" pos="relative" justify="center">
+            <Box
+              ref={indicator}
+              w="4px"
+              h="56px"
+              bg="blue"
               pos="absolute"
+              left="50%"
               top="50%"
-              transform="translate(2px, -50%)"
-              bgImage="/IntervalR.svg"
-              bgRepeat="repeat-x"
-              overflow="hidden"
-              sx={{ backgroundPositionY: "center" }}
-              onMouseDown={startDrag}
-            >
+              transform="translate(-50%, -50%)"
+              zIndex={2}
+            />
+            <MetaData />
+            <Box pos="relative" h="22px" zIndex={1}>
               <Flex
+                w="0px"
+                left="0px"
+                h="100%"
+                ref={timeline}
                 alignItems="center"
-                userSelect="none"
-                pos="relative"
-                ref={metadataContainer}
+                pos="absolute"
+                bgImage="/IntervalR.svg"
+                bgRepeat="repeat-x"
+                sx={{ backgroundPositionY: "center" }}
+                onMouseDown={startDrag}
               >
-                <TimeStamps />
+                <Flex
+                  zIndex={-1}
+                  alignItems="center"
+                  userSelect="none"
+                  pos="relative"
+                  ref={metadataContainer}
+                >
+                  <TimeStamps />
+                </Flex>
               </Flex>
-            </Flex>
-          </Box>
+            </Box>
+          </Flex>
         </Flex>
       </Box>
     </>
@@ -106,12 +106,16 @@ function TimeStamps() {
   if (!startDate) return null;
 
   return (
-    <Flex transform="translateY(54px)" alignItems="center">
+    <Flex transform="translateY(calc(100% + 4px))" alignItems="center">
       {timestamps.map((_, i) => {
         const time = new Date(new Date(startDate).getTime() + 5 * i * 60000);
         return (
-          <Box key={i} minW="240px" zIndex={2}>
-            <Box display="inline-flex" transform="translateX(-50%)">
+          <Box key={i} minW="240px">
+            <Box
+              display="inline-flex"
+              transform="translateX(-50%)"
+              color="white"
+            >
               {time.toLocaleTimeString()}
             </Box>
           </Box>
@@ -147,12 +151,24 @@ function MetaData() {
   }, []);
 
   return (
-    <Flex userSelect="none" alignItems="center" columnGap="1rem">
-      <Text ref={dateContainer}>
+    <Flex
+      userSelect="none"
+      alignItems="center"
+      columnGap="1rem"
+      pos="absolute"
+      top="-24px"
+      left="50%"
+      transform="translate(-50%, -100%)"
+    >
+      <Text ref={dateContainer} color="white">
         {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()}
       </Text>
       {events.map((event) => {
-        return <Box key={event.uniqueId}>{event.type}</Box>;
+        return (
+          <Box color="white" key={event.uniqueId}>
+            {event.type}
+          </Box>
+        );
       })}
     </Flex>
   );

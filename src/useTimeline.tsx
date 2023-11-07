@@ -6,6 +6,7 @@ import {
 } from "react";
 import { hashCode } from "./utils";
 import {
+  addToElementWidth,
   pxToTime,
   secToMs,
   secondsToPx,
@@ -54,16 +55,16 @@ export default function useTimeline() {
     stopUpdatingCurrentEvent,
   } = useTimelineEvents(getCurrentPlayerDateTime);
 
-  const didRender = useRef(false);
-  useEffect(() => {
-    if (didRender.current) return;
-    didRender.current = true;
+  // const didRender = useRef(false);
+  // useEffect(() => {
+  //   if (didRender.current) return;
+  //   didRender.current = true;
 
-    setTimeout(() => {
-      mapEvents(testEvents);
-      renderEvents(testEvents);
-    }, 10000);
-  }, []);
+  //   setTimeout(() => {
+  //     mapEvents(testEvents);
+  //     renderEvents(testEvents);
+  //   }, 10000);
+  // }, []);
 
   const updateTimelineWidth = useCallback((e: Event) => {
     const { detail } = e as TimelineEvent;
@@ -118,8 +119,8 @@ export default function useTimeline() {
       const playableRangeEl = document.createElement("div");
 
       playableRangeEl.id = range.elementId;
-      playableRangeEl.style.height = "40px";
-      playableRangeEl.style.background = "rgba(0, 0, 0, 0.7)";
+      playableRangeEl.style.height = "22px";
+      playableRangeEl.style.backgroundColor = "rgba(68, 70, 79, 0.7)";
       playableRangeEl.style.position = "absolute";
 
       const startTime =
@@ -139,7 +140,7 @@ export default function useTimeline() {
     };
 
     if (gapTimeRanges.length === 0) {
-      timeline.current.style.backgroundColor = "rgba(0, 0, 0, 0.7)";
+      timeline.current.style.backgroundColor = "rgba(68, 70, 79, 0.7)";
       if (currentlyUpdatingRangeId.current) removeCurrentlyUpdatingRangeEl();
     } else {
       timeline.current.style.backgroundColor = "transparent";
@@ -206,7 +207,7 @@ export default function useTimeline() {
         eventEl.style.zIndex = event.type === "AWAKE" ? "1" : "2";
         eventEl.style.height = "12px";
         eventEl.style.borderRadius = "24px";
-        eventEl.style.background =
+        eventEl.style.backgroundColor =
           event.type === "AWAKE"
             ? "rgba(186, 26, 26, 0.85)"
             : "rgba(103, 67, 203, 0.85)";
@@ -364,11 +365,8 @@ export default function useTimeline() {
     if (newWidth <= trueTimelineWidth.current) {
       timeline.current.style.width = `${newWidth}px`;
 
-      const currentlyUpdatingRange = document.querySelector<HTMLDivElement>(
-        `#${currentlyUpdatingRangeId.current}`
-      );
-      if (currentlyUpdatingRange)
-        currentlyUpdatingRange.style.width = `${newWidth}px`;
+      if (currentlyUpdatingRangeId.current)
+        addToElementWidth(currentlyUpdatingRangeId.current, updateWidth);
     }
 
     previousTime.current = currentTime;

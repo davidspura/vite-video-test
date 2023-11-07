@@ -124,6 +124,14 @@ const strictIsEqual = (compare: any, to: any) => {
   return JSON.stringify(compare) === JSON.stringify(to);
 };
 
+const addToElementWidth = (id: string, width: number) => {
+  const el = document.querySelector<HTMLDivElement>(`#${id}`);
+  if (el) {
+    const currentWidth = el.getBoundingClientRect().width;
+    el.style.width = width + currentWidth + "px";
+  }
+};
+
 export {
   decoder,
   encoder,
@@ -138,4 +146,5 @@ export {
   pxToTime,
   getEventInDateRange,
   strictIsEqual,
+  addToElementWidth,
 };
