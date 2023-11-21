@@ -75,6 +75,12 @@ const isGapFile = (file: string | HlsDbItem) => {
 const msToSeconds = (ms: number) => ms / 1000;
 const secToMs = (seconds: number) => seconds * 1000;
 
+const msToFixedSeconds = (ms: number) => {
+  const sec = msToSeconds(ms);
+  if (sec > 10) return sec;
+  return "0" + sec;
+};
+
 const getGapFilename = (duration: string) => {
   const durationNum = parseFloat(duration);
   const closestDuration =
@@ -141,6 +147,7 @@ export {
   isGapFile,
   msToSeconds,
   secToMs,
+  msToFixedSeconds,
   getGapFilename,
   secondsToPx,
   pxToTime,

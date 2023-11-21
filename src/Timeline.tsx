@@ -43,12 +43,13 @@ export default function TestTimeline({ canStart }: { canStart: boolean }) {
               ref={indicator}
               w="4px"
               h="56px"
-              bg="blue"
               pos="absolute"
               left="50%"
               top="50%"
               transform="translate(-50%, -50%)"
               zIndex={2}
+              bg="blue"
+              pointerEvents="none"
             />
             <MetaData />
             <Box pos="relative" h="22px" zIndex={1}>
@@ -63,6 +64,7 @@ export default function TestTimeline({ canStart }: { canStart: boolean }) {
                 bgRepeat="repeat-x"
                 sx={{ backgroundPositionY: "center" }}
                 onMouseDown={startDrag}
+                overflowX="clip"
               >
                 <Flex
                   zIndex={-1}

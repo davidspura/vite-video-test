@@ -20,6 +20,7 @@ export default class Recorder {
 
   private sourceDate: Date = new Date();
   private trancoderQue: Blob[] = [];
+  private videoAppendInMs = 0;
 
   db = new DB();
   private dbController = new DbController(this.db);
@@ -27,6 +28,7 @@ export default class Recorder {
   private transcoder = new Transcoder(this.playlist);
 
   status: "idle" | "recording" = "idle";
+  trueSegmentEndTime = new Date().getTime();
 
   init = async () => {
     await this.db.init();
@@ -55,10 +57,9 @@ export default class Recorder {
 
     this.mediaRecorder?.start();
 
-    // console.log("Called mediaRecorder.start()");
     this.timeout = setTimeout(() => {
+      this.trueSegmentEndTime = new Date().getTime();
       this.mediaRecorder?.stop();
-      // console.log("Called mediaRecorder.stop()");
       this.createSourceVideo();
     }, SEGMENT_LENGTH);
   };
@@ -104,13 +105,12 @@ export default class Recorder {
   };
 
   private transcode = async (blob: Blob) => {
-    // console.time("transcoding-time");
+    const trueSegmentEndTime = this.trueSegmentEndTime;
     const { initData, segmentsData } = await this.transcoder.transcode({
       blob,
       includeInitData: !this.hasCreatedInitFile,
+      appendInMs: this.videoAppendInMs !== 0 ? this.videoAppendInMs : null,
     });
-
-    // console.timeEnd("transcoding-time");
 
     let initFilename: string | undefined;
     if (initData) {
@@ -154,6 +154,14 @@ export default class Recorder {
       );
       i++;
     }
+
+    const msDiff = trueSegmentEndTime - this.sourceDate.getTime();
+    console.log("ms diff:", msDiff);
+
+    if (msDiff >= 200) {
+      console.log("'msDiff' >= true, next transcoding will append");
+      this.videoAppendInMs = msDiff;
+    } else this.videoAppendInMs = 0;
 
     this.playlist.addToNextSegmentIndex(segmentsData.length);
     this.playlist.lastSentDeltaPlaylist = null;

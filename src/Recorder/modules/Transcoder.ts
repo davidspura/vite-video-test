@@ -1,6 +1,6 @@
 import { FFmpeg } from "@ffmpeg/ffmpeg";
 import { TRANSCODER_RESET_TIME } from "../const";
-import { decoder } from "../extensions";
+import { decoder, msToFixedSeconds } from "../extensions";
 
 export default class Transcoder {
   constructor(private playlist: Playlist) {}
@@ -50,18 +50,60 @@ export default class Transcoder {
   transcode = async ({
     blob,
     includeInitData,
+    appendInMs,
   }: {
     blob: Blob;
     includeInitData?: boolean;
+    appendInMs?: number | null;
   }) => {
     if (!this.ffmpeg) console.error("Ffmpeg not initialized");
 
     const arrayBuffer = await blob.arrayBuffer();
-    this.ffmpeg.writeFile("input.webm", new Uint8Array(arrayBuffer));
+    await this.ffmpeg.writeFile("input.webm", new Uint8Array(arrayBuffer));
+
+    await this.ffmpeg.exec([
+      "-i",
+      "input.webm",
+      "-c:a",
+      "aac",
+      "-c:v",
+      "copy",
+      "input.mp4",
+    ]);
+
+    if (appendInMs) {
+      const listFile = "file 'short.mp4'\nfile 'input.mp4'";
+      const listFileBuffer = await new Blob([listFile], {
+        type: "plain/text",
+      }).arrayBuffer();
+      await this.ffmpeg.exec([
+        "-i",
+        "input.mp4",
+        "-ss",
+        "00:00:00",
+        "-t",
+        `00:00:${msToFixedSeconds(appendInMs)}`,
+        "-c",
+        "copy",
+        "short.mp4",
+      ]);
+      await this.ffmpeg.writeFile("list.txt", new Uint8Array(listFileBuffer));
+      await this.ffmpeg.exec([
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        "list.txt",
+        "-c",
+        "copy",
+        "combined.mp4",
+      ]);
+    }
 
     const options = [
       "-i",
-      "input.webm",
+      appendInMs ? "combined.mp4" : "input.mp4",
       "-c:a",
       "aac",
       "-c:v",
@@ -81,9 +123,7 @@ export default class Transcoder {
       "playlist.m3u8",
     ];
 
-    // console.time("run-method");
     await this.ffmpeg.exec(options);
-    // console.timeEnd("run-method");
 
     const ffmpegFilenames = (await this.ffmpeg.listDir("/")).map(
       (fsnode) => fsnode.name
@@ -91,6 +131,8 @@ export default class Transcoder {
     const playlistData = (await this.ffmpeg.readFile(
       "playlist.m3u8"
     )) as Uint8Array;
+
+    console.log(decoder.decode(playlistData));
 
     const segmentFilenames = ffmpegFilenames
       .filter((file) => file.includes("segment"))
@@ -103,7 +145,7 @@ export default class Transcoder {
     const segmentsData = await Promise.all(
       segmentFilenames.map(async (filename, index) => {
         const data = (await this.ffmpeg.readFile(filename)) as Uint8Array;
-        this.ffmpeg.deleteFile(filename);
+        await this.ffmpeg.deleteFile(filename);
 
         return {
           data,
@@ -116,9 +158,19 @@ export default class Transcoder {
       ? ((await this.ffmpeg.readFile("init.mp4")) as Uint8Array)
       : null;
 
-    this.ffmpeg.deleteFile("input.webm");
-    this.ffmpeg.deleteFile("playlist.m3u8");
-    this.ffmpeg.deleteFile("init.mp4");
+    await this.ffmpeg.deleteFile("input.webm");
+    await this.ffmpeg.deleteFile("input.mp4");
+    await this.ffmpeg.deleteFile("playlist.m3u8");
+    await this.ffmpeg.deleteFile("init.mp4");
+    if (appendInMs) {
+      await this.ffmpeg.deleteFile("short.mp4");
+      await this.ffmpeg.deleteFile("combined.mp4");
+      await this.ffmpeg.deleteFile("list.txt");
+    }
+
+    console.log(
+      segmentsData.reduce((all, one) => (all += Number(one.duration)), 0)
+    );
 
     await this.refreshInstance();
     return {
